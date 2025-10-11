@@ -1,0 +1,2 @@
+# marybot
+Mary discord bot
