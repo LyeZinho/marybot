@@ -1,0 +1,5 @@
+{
+  "name": "node-cron",
+  "version": "^3.0.3",
+  "description": "A simple cron-like job scheduler for Node.js"
+}

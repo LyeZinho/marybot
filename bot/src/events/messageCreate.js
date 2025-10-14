@@ -1,118 +1,147 @@
 import { Events } from 'discord.js';
+import { dataService } from '../services/dataService.js';
+import { botConfig } from '../config.js';
+import { getRandomElement } from '../utils/random.js';
 
 export const name = Events.MessageCreate;
 
 export async function execute(message) {
-  // Ignorar bots
+  // Ignore bots
   if (message.author.bot) return;
 
-  // Sistema básico de XP por mensagem (chance de 10%)
-  if (Math.random() < 0.1) {
+  // XP system for messages (10% chance)
+  if (Math.random() < botConfig.economy.messageXpChance) {
     try {
-      const { prisma } = await import('../database/client.js');
-      const { getRandomInt } = await import('../utils/random.js');
-      
-      // Buscar ou criar usuário
-      let user = await prisma.user.findUnique({
-        where: { discordId: message.author.id }
-      });
+      const xpGain = Math.floor(Math.random() * 
+        (botConfig.economy.messageXpMax - botConfig.economy.messageXpMin + 1)) + 
+        botConfig.economy.messageXpMin;
 
-      if (!user) {
-        user = await prisma.user.create({
-          data: {
-            discordId: message.author.id,
-            username: message.author.username
-          }
-        });
-      }
+      // Add XP using data service
+      const result = await dataService.addXP(
+        message.author.id, 
+        xpGain, 
+        'Message activity'
+      );
 
-      // Adicionar XP aleatório (1-5)
-      const xpGain = getRandomInt(1, 5);
-      const oldLevel = Math.floor(user.xp / 100) + 1;
-      
-      await prisma.user.update({
-        where: { discordId: message.author.id },
-        data: {
-          xp: { increment: xpGain }
-        }
-      });
-
-      // Verificar se subiu de nível
-      const newLevel = Math.floor((user.xp + xpGain) / 100) + 1;
-      
-      if (newLevel > oldLevel) {
-        // Recompensa por subir de nível
-        const levelReward = newLevel * 10;
-        
-        await prisma.user.update({
-          where: { discordId: message.author.id },
-          data: {
-            coins: { increment: levelReward }
-          }
-        });
-
-        // Enviar mensagem de level up (apenas se não for spam)
+      // Check for level up
+      if (result && result.levelUp) {
         const levelUpEmbed = {
           title: '🎉 Level Up!',
-          description: `Parabéns ${message.author.username}! Você subiu para o **nível ${newLevel}**!`,
+          description: `Parabéns ${message.author}! Você alcançou o nível **${result.newLevel}**!`,
+          color: parseInt(botConfig.successColor.replace('#', ''), 16),
           fields: [
-            { name: '💰 Recompensa', value: `+${levelReward} 🪙`, inline: true },
-            { name: '✨ Novo Nível', value: `${newLevel}`, inline: true }
+            {
+              name: '💰 Recompensa',
+              value: `${result.bonusCoins} moedas`,
+              inline: true
+            }
           ],
-          color: 0x00FF7F,
-          timestamp: new Date(),
-          footer: {
-            text: 'Continue participando para ganhar mais XP!',
-            icon_url: message.author.displayAvatarURL()
-          }
+          timestamp: new Date()
         };
 
-        // Chance de 50% de mostrar level up para não fazer spam
-        if (Math.random() < 0.5) {
-          await message.reply({ embeds: [levelUpEmbed] });
+        // Try to send level up message in the same channel
+        try {
+          await message.channel.send({ embeds: [levelUpEmbed] });
+        } catch (error) {
+          console.warn('Could not send level up message:', error.message);
         }
       }
 
+      // Trigger Discord event for XP gain
+      await dataService.triggerDiscordEvent('discord_event', {
+        type: 'message_create',
+        payload: {
+          author: {
+            id: message.author.id,
+            username: message.author.username,
+            bot: message.author.bot
+          },
+          content: message.content.length, // Send only length for privacy
+          channelId: message.channel.id,
+          guildId: message.guild?.id,
+          xpGained: xpGain
+        }
+      });
+
     } catch (error) {
-      console.error('Erro ao processar XP da mensagem:', error);
+      console.error('❌ Error processing message XP:', error);
+      // Continue execution even if XP processing fails
     }
   }
 
-  // Easter eggs e respostas automáticas
+  // Easter eggs and automatic responses
   const content = message.content.toLowerCase();
   
-  if (content.includes('marybot') || content.includes('mary bot')) {
+  // Bot mention responses
+  if ((content.includes('marybot') || content.includes('mary bot')) && 
+      Math.random() < botConfig.easterEggs.botMentionChance) {
+    
     const responses = [
-      '🤖 Olá! Eu sou a MaryBot! Use `/help` para ver meus comandos!',
-      '🎌 Oi! Pronta para falar sobre animes?',
-      '✨ Oi! Como posso ajudar hoje?',
-      '🎮 Olá! Que tal jogar alguns minigames?',
-      '💰 Oi! Já coletou seu `/daily` hoje?'
+      'Oi! 👋 Como posso ajudar você hoje?',
+      'Olá! Use `/help` para ver todos os meus comandos! 🤖',
+      'Konnichiwa! 🎌 Pronto para explorar o mundo dos animes?',
+      'Yo! Que tal jogar um quiz ou fazer um gacha? 🎮',
+      'Salve! Não esqueça de pegar seu daily com `/daily`! 💰'
     ];
     
-    const randomResponse = responses[Math.floor(Math.random() * responses.length)];
+    const randomResponse = getRandomElement(responses);
     
-    // Chance de 30% de responder para não fazer spam
-    if (Math.random() < 0.3) {
+    try {
       await message.reply(randomResponse);
+    } catch (error) {
+      console.warn('Could not send bot mention response:', error.message);
     }
   }
 
-  // Reagir a mensagens sobre anime
-  if (content.includes('anime') && Math.random() < 0.1) {
+  // Anime reaction
+  if (content.includes('anime') && 
+      Math.random() < botConfig.easterEggs.animeReactionChance) {
+    
+    const animeEmojis = ['🎌', '⭐', '🌸', '🍜', '🎭'];
+    const randomEmoji = getRandomElement(animeEmojis);
+    
     try {
-      await message.react('🎌');
+      await message.react(randomEmoji);
     } catch (error) {
-      console.error('Erro ao reagir à mensagem:', error);
+      console.warn('Could not add anime reaction:', error.message);
     }
   }
 
-  // Reagir a mensagens sobre waifus
-  if ((content.includes('waifu') || content.includes('husbando')) && Math.random() < 0.2) {
+  // Waifu/Husbando reaction
+  if ((content.includes('waifu') || content.includes('husbando')) && 
+      Math.random() < botConfig.easterEggs.waifuReactionChance) {
+    
+    const waifuEmojis = ['💖', '😍', '🥰', '💕', '✨'];
+    const randomEmoji = getRandomElement(waifuEmojis);
+    
     try {
-      await message.react('😍');
+      await message.react(randomEmoji);
     } catch (error) {
-      console.error('Erro ao reagir à mensagem:', error);
+      console.warn('Could not add waifu reaction:', error.message);
+    }
+  }
+
+  // Special keywords
+  const specialKeywords = {
+    'arigatou': ['🙏', 'De nada! 😊'],
+    'ohayo': ['🌅', 'Ohayo gozaimasu! ☀️'],
+    'konbanwa': ['🌙', 'Konbanwa! 🌃'],
+    'sayonara': ['👋', 'Mata ne! 👋'],
+    'senpai': ['😳', 'S-senpai noticed me! 💖']
+  };
+
+  for (const [keyword, reaction] of Object.entries(specialKeywords)) {
+    if (content.includes(keyword) && Math.random() < 0.3) {
+      try {
+        if (reaction[0].length === 2) { // It's an emoji
+          await message.react(reaction[0]);
+        } else { // It's a text response
+          await message.reply(reaction[1]);
+        }
+      } catch (error) {
+        console.warn(`Could not send ${keyword} reaction:`, error.message);
+      }
+      break; // Only react to one keyword per message
     }
   }
 }

@@ -1,5 +1,6 @@
 import { SlashCommandBuilder, EmbedBuilder } from 'discord.js';
-import { prisma } from '../../database/client.js';
+import { dataService } from '../../services/dataService.js';
+import { botConfig } from '../../config.js';
 
 export const data = new SlashCommandBuilder()
   .setName('leaderboard')
@@ -11,8 +12,7 @@ export const data = new SlashCommandBuilder()
       .addChoices(
         { name: 'XP', value: 'xp' },
         { name: 'Moedas', value: 'coins' },
-        { name: 'Nível', value: 'level' },
-        { name: 'Personagens', value: 'characters' }
+        { name: 'Nível', value: 'level' }
       )
   );
 
@@ -22,180 +22,112 @@ export async function execute(interaction) {
   await interaction.deferReply();
 
   try {
-    let users;
-    let title;
-    let emoji;
+    // Get leaderboard data using data service
+    const users = await dataService.getLeaderboard(tipo, 10);
+    
+    if (!users || users.length === 0) {
+      const errorEmbed = new EmbedBuilder()
+        .setTitle('📊 Leaderboard')
+        .setDescription('Nenhum usuário encontrado no ranking.')
+        .setColor(botConfig.warningColor)
+        .setTimestamp();
 
+      return await interaction.editReply({ embeds: [errorEmbed] });
+    }
+
+    // Define titles and emojis based on type
+    let title, emoji, formatValue;
+    
     switch (tipo) {
       case 'coins':
-        users = await prisma.user.findMany({
-          orderBy: { coins: 'desc' },
-          take: 10
-        });
-        title = '💰 Ranking por Moedas';
+        title = '💰 Ranking de Moedas';
         emoji = '🪙';
+        formatValue = (user) => `${user.coins.toLocaleString()} moedas`;
         break;
-      
       case 'level':
-        users = await prisma.user.findMany({
-          orderBy: { xp: 'desc' },
-          take: 10
-        });
-        // Calcular nível para cada usuário
-        users = users.map(user => ({
-          ...user,
-          level: Math.floor(user.xp / 100) + 1
-        }));
-        title = '📈 Ranking por Nível';
-        emoji = '🏅';
-        break;
-      
-      case 'characters':
-        users = await prisma.user.findMany({
-          include: {
-            characters: true
-          },
-          take: 50 // Buscar mais para ordenar depois
-        });
-        
-        // Ordenar por quantidade de personagens
-        users = users
-          .map(user => ({
-            ...user,
-            characterCount: user.characters.length
-          }))
-          .sort((a, b) => b.characterCount - a.characterCount)
-          .slice(0, 10);
-        
-        title = '🎴 Ranking por Personagens';
+        title = '📊 Ranking de Níveis';
         emoji = '⭐';
+        formatValue = (user) => {
+          const level = Math.floor(user.xp / botConfig.economy.xpPerLevel) + 1;
+          return `Nível ${level}`;
+        };
         break;
-      
       default: // xp
-        users = await prisma.user.findMany({
-          orderBy: { xp: 'desc' },
-          take: 10
-        });
-        title = '✨ Ranking por XP';
-        emoji = '💫';
+        title = '⚡ Ranking de XP';
+        emoji = '⭐';
+        formatValue = (user) => `${user.xp.toLocaleString()} XP`;
         break;
     }
 
-    if (users.length === 0) {
-      const embed = new EmbedBuilder()
-        .setTitle('📊 Ranking Vazio')
-        .setDescription('Ainda não há usuários registrados no sistema.')
-        .setColor('#FFB347');
-      
-      return await interaction.editReply({ embeds: [embed] });
-    }
-
-    // Encontrar posição do usuário atual
-    let userPosition = -1;
-    let currentUserData = null;
+    // Create leaderboard text
+    let leaderboardText = '';
+    const medals = ['🥇', '🥈', '🥉'];
     
-    for (let i = 0; i < users.length; i++) {
-      if (users[i].discordId === interaction.user.id) {
-        userPosition = i + 1;
-        currentUserData = users[i];
-        break;
+    users.forEach((user, index) => {
+      const medal = index < 3 ? medals[index] : `${index + 1}.`;
+      const value = formatValue(user);
+      
+      // Truncate long usernames
+      const displayName = user.username.length > 20 
+        ? user.username.substring(0, 17) + '...' 
+        : user.username;
+      
+      leaderboardText += `${medal} **${displayName}** - ${value}\n`;
+    });
+
+    // Find current user's position if not in top 10
+    let userPosition = '';
+    const currentUserId = interaction.user.id;
+    const userInTop10 = users.find(user => user.discordId === currentUserId);
+    
+    if (!userInTop10) {
+      try {
+        // Get current user's data to show their position
+        const currentUser = await dataService.getUserProfile(currentUserId);
+        if (currentUser) {
+          const currentValue = formatValue(currentUser);
+          userPosition = `\n📍 **Sua posição:** ${currentUser.username} - ${currentValue}`;
+        }
+      } catch (error) {
+        // Ignore error for user position
       }
     }
 
     const embed = new EmbedBuilder()
       .setTitle(title)
-      .setColor('#4ECDC4')
-      .setTimestamp()
+      .setDescription(leaderboardText + userPosition)
+      .setColor(botConfig.embedColor)
       .setFooter({ 
-        text: `Solicitado por ${interaction.user.username}`, 
-        iconURL: interaction.user.displayAvatarURL() 
-      });
+        text: `Mostrando top ${users.length} usuários • Use /daily para ganhar XP e moedas!`
+      })
+      .setTimestamp();
 
-    let description = '';
-    const medals = ['🥇', '🥈', '🥉'];
-    
-    users.forEach((user, index) => {
-      const position = index + 1;
-      const medal = medals[index] || `**${position}.**`;
-      
-      let value;
-      switch (tipo) {
-        case 'coins':
-          value = `${user.coins} ${emoji}`;
-          break;
-        case 'level':
-          value = `Nível ${user.level} ${emoji}`;
-          break;
-        case 'characters':
-          value = `${user.characterCount} ${emoji}`;
-          break;
-        default:
-          value = `${user.xp} ${emoji}`;
-          break;
-      }
-      
-      const highlight = user.discordId === interaction.user.id ? '**' : '';
-      description += `${medal} ${highlight}${user.username}${highlight} - ${value}\n`;
-    });
-
-    embed.setDescription(description);
-
-    // Adicionar posição do usuário se não estiver no top 10
-    if (userPosition === -1) {
-      // Buscar posição real do usuário
-      let allUsers;
-      
-      switch (tipo) {
-        case 'coins':
-          allUsers = await prisma.user.findMany({
-            orderBy: { coins: 'desc' },
-            select: { discordId: true }
-          });
-          break;
-        case 'characters':
-          allUsers = await prisma.user.findMany({
-            include: {
-              characters: true
-            }
-          });
-          allUsers = allUsers
-            .map(user => ({
-              ...user,
-              characterCount: user.characters.length
-            }))
-            .sort((a, b) => b.characterCount - a.characterCount);
-          break;
-        default:
-          allUsers = await prisma.user.findMany({
-            orderBy: { xp: 'desc' },
-            select: { discordId: true }
-          });
-          break;
-      }
-      
-      const realPosition = allUsers.findIndex(user => user.discordId === interaction.user.id) + 1;
-      
-      if (realPosition > 0) {
-        embed.addFields(
-          { name: '📍 Sua Posição', value: `${realPosition}º lugar`, inline: true }
-        );
-      }
-    } else {
-      embed.addFields(
-        { name: '🎉 Sua Posição', value: `${userPosition}º lugar`, inline: true }
-      );
+    // Add total users info if available
+    try {
+      // This would require a separate endpoint for total users count
+      // For now, we'll skip this feature
+    } catch (error) {
+      // Ignore
     }
 
     await interaction.editReply({ embeds: [embed] });
 
+    // Trigger Discord event for leaderboard view
+    await dataService.triggerDiscordEvent('user_interaction', {
+      type: 'leaderboard_viewed',
+      userId: interaction.user.id,
+      leaderboardType: tipo
+    });
+
   } catch (error) {
-    console.error('Erro ao buscar leaderboard:', error);
-    
-    const embed = new EmbedBuilder()
+    console.error('❌ Error in leaderboard command:', error);
+
+    const errorEmbed = new EmbedBuilder()
       .setTitle('❌ Erro')
-      .setDescription('Ocorreu um erro ao buscar o ranking. Tente novamente mais tarde.')
-      .setColor('#FF4444');
-    
-    await interaction.editReply({ embeds: [embed] });
+      .setDescription('Houve um erro ao carregar o ranking. Tente novamente mais tarde.')
+      .setColor(botConfig.errorColor)
+      .setTimestamp();
+
+    await interaction.editReply({ embeds: [errorEmbed] });
   }
 }

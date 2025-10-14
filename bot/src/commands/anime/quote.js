@@ -1,6 +1,6 @@
 import { SlashCommandBuilder, EmbedBuilder } from 'discord.js';
-import { prisma } from '../../database/client.js';
-import { getRandomElement } from '../../utils/random.js';
+import { dataService } from '../../services/dataService.js';
+import { botConfig } from '../../config.js';
 
 export const data = new SlashCommandBuilder()
   .setName('quote')
@@ -10,84 +10,65 @@ export async function execute(interaction) {
   try {
     await interaction.deferReply();
 
-    // Buscar uma citação aleatória do banco de dados
-    const quotes = await prisma.animeQuote.findMany();
+    // Get random quote using data service
+    const quote = await dataService.getRandomQuote();
     
-    if (quotes.length === 0) {
-      // Fallback com algumas citações predefinidas
-      const fallbackQuotes = [
-        {
-          quote: "Eu irei me tornar o Hokage!",
-          character: "Naruto Uzumaki",
-          anime: "Naruto"
-        },
-        {
-          quote: "A vingança nunca cura a dor, só faz ela se espalhar.",
-          character: "Kakashi Hatake",
-          anime: "Naruto"
-        },
-        {
-          quote: "Pessoas morrem quando são mortas.",
-          character: "Shirou Emiya",
-          anime: "Fate/stay night"
-        },
-        {
-          quote: "O que não mata você, te deixa mais forte.",
-          character: "Senku Ishigami",
-          anime: "Dr. Stone"
-        },
-        {
-          quote: "Eu não sou estúpido! Eu sou apenas... especial!",
-          character: "Natsu Dragneel",
-          anime: "Fairy Tail"
-        }
-      ];
-      
-      const randomQuote = getRandomElement(fallbackQuotes);
-      
-      const embed = new EmbedBuilder()
-        .setTitle('💬 Citação de Anime')
-        .setDescription(`*"${randomQuote.quote}"*`)
-        .addFields(
-          { name: '👤 Personagem', value: randomQuote.character, inline: true },
-          { name: '🎌 Anime', value: randomQuote.anime, inline: true }
-        )
-        .setColor('#FFD93D')
-        .setTimestamp()
-        .setFooter({ 
-          text: `Solicitado por ${interaction.user.username}`, 
-          iconURL: interaction.user.displayAvatarURL() 
-        });
+    if (!quote) {
+      const errorEmbed = new EmbedBuilder()
+        .setTitle('❌ Nenhuma Citação Encontrada')
+        .setDescription('Não foi possível encontrar citações no banco de dados.')
+        .setColor(botConfig.warningColor)
+        .setTimestamp();
 
-      return await interaction.editReply({ embeds: [embed] });
+      return await interaction.editReply({ embeds: [errorEmbed] });
     }
-
-    const randomQuote = getRandomElement(quotes);
 
     const embed = new EmbedBuilder()
       .setTitle('💬 Citação de Anime')
-      .setDescription(`*"${randomQuote.quote}"*`)
+      .setDescription(`*"${quote.text}"*`)
       .addFields(
-        { name: '👤 Personagem', value: randomQuote.character, inline: true },
-        { name: '🎌 Anime', value: randomQuote.anime, inline: true }
+        { 
+          name: '👤 Personagem', 
+          value: quote.character, 
+          inline: true 
+        },
+        { 
+          name: '🎌 Anime', 
+          value: quote.anime, 
+          inline: true 
+        }
       )
-      .setColor('#FFD93D')
-      .setTimestamp()
+      .setColor(botConfig.embedColor)
       .setFooter({ 
-        text: `Solicitado por ${interaction.user.username}`, 
-        iconURL: interaction.user.displayAvatarURL() 
-      });
+        text: 'Use /quote novamente para ver outra citação!' 
+      })
+      .setTimestamp();
+
+    // Add image if available
+    if (quote.imageUrl) {
+      embed.setImage(quote.imageUrl);
+    }
 
     await interaction.editReply({ embeds: [embed] });
+
+    // Trigger Discord event for quote view
+    await dataService.triggerDiscordEvent('user_interaction', {
+      type: 'quote_viewed',
+      userId: interaction.user.id,
+      quoteId: quote.id,
+      character: quote.character,
+      anime: quote.anime
+    });
 
   } catch (error) {
-    console.error('Erro ao buscar citação:', error);
-    
-    const embed = new EmbedBuilder()
+    console.error('❌ Error in quote command:', error);
+
+    const errorEmbed = new EmbedBuilder()
       .setTitle('❌ Erro')
-      .setDescription('Ocorreu um erro ao buscar uma citação. Tente novamente mais tarde.')
-      .setColor('#FF4444');
-    
-    await interaction.editReply({ embeds: [embed] });
+      .setDescription('Houve um erro ao buscar uma citação. Tente novamente mais tarde.')
+      .setColor(botConfig.errorColor)
+      .setTimestamp();
+
+    await interaction.editReply({ embeds: [errorEmbed] });
   }
 }

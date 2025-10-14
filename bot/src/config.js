@@ -3,14 +3,36 @@ import { config } from 'dotenv';
 // Carregar variáveis de ambiente
 config();
 
+// Configurações do bot
 export const botConfig = {
   // Discord Configuration
   token: process.env.DISCORD_TOKEN,
   clientId: process.env.CLIENT_ID,
   guildId: process.env.GUILD_ID, // Para desenvolvimento (opcional)
   
-  // Database Configuration
-  databaseUrl: process.env.DATABASE_URL || 'postgresql://botuser:botpass@localhost:5432/marybot',
+  // WebSocket configuration
+  backend: {
+    url: process.env.BACKEND_SERVICE_URL || 'http://localhost:3002',
+    serviceToken: process.env.SERVICE_TOKEN || 'bot-service-token',
+    reconnectAttempts: 5,
+    reconnectInterval: 5000
+  },
+  
+  // API configuration (fallback)
+  api: {
+    url: process.env.API_SERVICE_URL || 'http://localhost:3001',
+    timeout: 10000
+  },
+  
+  // Feature flags
+  features: {
+    useWebSocket: process.env.USE_WEBSOCKET !== 'false', // Default to true
+    enableFallback: process.env.ENABLE_FALLBACK !== 'false', // Default to true
+    enableCache: process.env.ENABLE_CACHE === 'true' // Default to false
+  },
+  
+  // Database Configuration (legacy - for fallback)
+  databaseUrl: process.env.DATABASE_URL || 'postgresql://botuser:botpass@homelab.op:5400/marybot',
   
   // Bot Settings
   prefix: '!', // Para comandos legacy (opcional)
@@ -102,7 +124,9 @@ export function validateConfig() {
     throw new Error(`Configurações obrigatórias ausentes: ${missing.join(', ')}`);
   }
   
-  console.log('✅ Configurações validadas com sucesso!');
+  console.log('✅ Bot configuration validated');
+  console.log(`🔌 WebSocket mode: ${botConfig.features.useWebSocket ? 'Enabled' : 'Disabled'}`);
+  console.log(`🔄 Fallback mode: ${botConfig.features.enableFallback ? 'Enabled' : 'Disabled'}`);
 }
 
 // Utilitário para obter rank baseado no nível

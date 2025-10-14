@@ -1,0 +1,55 @@
+# Docker Compose Override para Desenvolvimento
+# Este arquivo é aplicado automaticamente em conjunto com docker-compose.yml
+# Use para personalizações de desenvolvimento sem modificar o arquivo principal
+
+version: "3.8"
+
+services:
+  # Override para desenvolvimento do API Service
+  api:
+    volumes:
+      - ./api:/app
+      - /app/node_modules
+    environment:
+      NODE_ENV: development
+    command: ["npm", "run", "dev"]
+    
+  # Override para desenvolvimento do Backend Service  
+  backend:
+    volumes:
+      - ./backend:/app
+      - /app/node_modules
+    environment:
+      NODE_ENV: development
+    command: ["npm", "run", "dev"]
+    
+  # Override para desenvolvimento do Bot Service
+  bot:
+    volumes:
+      - ./bot:/app
+      - /app/node_modules
+    environment:
+      NODE_ENV: development
+    command: ["npm", "run", "dev"]
+    
+  # Override para desenvolvimento do Admin Panel
+  admin-panel:
+    volumes:
+      - ./admin-panel:/app
+      - /app/node_modules
+    environment:
+      NODE_ENV: development
+    command: ["npm", "run", "dev"]
+    ports:
+      - "3003:3000"  # Next.js dev server usa porta 3000 internamente
+
+  # Configurações adicionais para desenvolvimento
+  db:
+    ports:
+      - "5400:5432"  # Expor PostgreSQL para acesso externo
+    volumes:
+      - postgres_dev_data:/var/lib/postgresql/data
+      - ./scripts/init-db.sql:/docker-entrypoint-initdb.d/init-db.sql:ro
+
+volumes:
+  postgres_dev_data:

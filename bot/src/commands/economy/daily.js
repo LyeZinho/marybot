@@ -1,6 +1,6 @@
 import { SlashCommandBuilder, EmbedBuilder } from 'discord.js';
-import { prisma } from '../../database/client.js';
-import { getRandomInt } from '../../utils/random.js';
+import { dataService } from '../../services/dataService.js';
+import { botConfig } from '../../config.js';
 
 export const data = new SlashCommandBuilder()
   .setName('daily')
@@ -10,132 +10,100 @@ export async function execute(interaction) {
   await interaction.deferReply();
 
   try {
-    // Buscar ou criar usuário no banco de dados
-    let user = await prisma.user.findUnique({
-      where: { discordId: interaction.user.id }
-    });
-
-    if (!user) {
-      user = await prisma.user.create({
-        data: {
-          discordId: interaction.user.id,
-          username: interaction.user.username
-        }
-      });
-    }
-
-    // Verificar se já recebeu o daily hoje
-    const now = new Date();
-    const lastDaily = user.lastDaily;
+    // Process daily reward using the data service
+    const result = await dataService.processDailyReward(interaction.user.id);
     
-    if (lastDaily) {
-      const timeSinceDaily = now.getTime() - lastDaily.getTime();
-      const hoursUntilDaily = 24 - Math.floor(timeSinceDaily / (1000 * 60 * 60));
-      
-      if (hoursUntilDaily > 0) {
-        const embed = new EmbedBuilder()
-          .setTitle('⏰ Daily já coletado!')
-          .setDescription(`Você já coletou seu daily hoje!\nVolte em **${hoursUntilDaily} horas** para coletar novamente.`)
-          .setColor('#FFB347')
-          .setThumbnail(interaction.user.displayAvatarURL())
-          .setTimestamp();
-        
-        return await interaction.editReply({ embeds: [embed] });
-      }
-    }
-
-    // Calcular recompensas baseadas no nível
-    const level = Math.floor(user.xp / 100) + 1;
-    const baseCoins = 50;
-    const bonusCoins = Math.floor(level * 2.5);
-    const totalCoins = baseCoins + bonusCoins + getRandomInt(10, 30);
-    
-    const baseXP = 25;
-    const bonusXP = Math.floor(level * 1.2);
-    const totalXP = baseXP + bonusXP + getRandomInt(5, 15);
-
-    // Streak bonus
-    let streakBonus = 0;
-    let streak = 1;
-    
-    if (lastDaily) {
-      const daysDiff = Math.floor((now - lastDaily) / (1000 * 60 * 60 * 24));
-      if (daysDiff === 1) {
-        // Mantém a streak
-        streak = user.streak || 1;
-        streak++;
-        if (streak <= 7) {
-          streakBonus = Math.floor(totalCoins * (streak * 0.1));
-        }
-      } else {
-        // Reset da streak se perdeu um dia
-        streak = 1;
-      }
-    }
-
-    const finalCoins = totalCoins + streakBonus;
-    const finalXP = totalXP;
-
-    // Atualizar usuário no banco
-    await prisma.user.update({
-      where: { discordId: interaction.user.id },
-      data: {
-        coins: { increment: finalCoins },
-        xp: { increment: finalXP },
-        lastDaily: now,
-        streak: streak
-      }
-    });
-
-    // Verificar se subiu de nível
-    const newLevel = Math.floor((user.xp + finalXP) / 100) + 1;
-    const leveledUp = newLevel > level;
-
+    // Create success embed
     const embed = new EmbedBuilder()
-      .setTitle('💎 Daily Coletado!')
-      .setDescription(`Parabéns ${interaction.user.username}! Você coletou sua recompensa diária!`)
-      .setColor('#00FF7F')
+      .setTitle('💰 Recompensa Diária Recebida!')
+      .setColor(botConfig.successColor)
       .setThumbnail(interaction.user.displayAvatarURL())
       .addFields(
-        { name: '💰 Moedas', value: `+${finalCoins} 🪙`, inline: true },
-        { name: '✨ XP', value: `+${finalXP} XP`, inline: true },
-        { name: '🔥 Streak', value: `${streak} dias`, inline: true }
+        { 
+          name: '🪙 Moedas Recebidas', 
+          value: `+${result.coins} moedas`, 
+          inline: true 
+        },
+        { 
+          name: '⭐ XP Recebido', 
+          value: `+${result.xp} XP`, 
+          inline: true 
+        },
+        { 
+          name: '🔥 Sequência', 
+          value: `${result.streak} dias`, 
+          inline: true 
+        },
+        { 
+          name: '💎 Total de Moedas', 
+          value: `${result.user.coins} moedas`, 
+          inline: true 
+        },
+        { 
+          name: '⚡ Total de XP', 
+          value: `${result.user.xp} XP`, 
+          inline: true 
+        },
+        { 
+          name: '📊 Nível', 
+          value: `${Math.floor(result.user.xp / botConfig.economy.xpPerLevel) + 1}`, 
+          inline: true 
+        }
       )
-      .setTimestamp()
       .setFooter({ 
-        text: 'Volte amanhã para mais recompensas!' 
+        text: 'Volte amanhã para continuar sua sequência!' 
+      })
+      .setTimestamp();
+
+    // Add streak bonus info if applicable
+    if (result.streak > 1) {
+      embed.addFields({
+        name: '🎯 Bônus de Sequência',
+        value: `Bônus de ${Math.round((result.streak - 1) * 10)}% aplicado!`,
+        inline: false
       });
-
-    if (streakBonus > 0) {
-      embed.addFields(
-        { name: '🎁 Bônus Streak', value: `+${streakBonus} 🪙 (${streak}x)`, inline: true }
-      );
     }
 
-    if (leveledUp) {
-      embed.addFields(
-        { name: '🎉 Level Up!', value: `Você subiu para o nível ${newLevel}!`, inline: false }
-      );
-      embed.setColor('#FFD700');
-    }
+    // Check if user leveled up and show notification
+    const currentLevel = Math.floor(result.user.xp / botConfig.economy.xpPerLevel) + 1;
+    const previousXp = result.user.xp - result.xp;
+    const previousLevel = Math.floor(previousXp / botConfig.economy.xpPerLevel) + 1;
 
-    // Chance de item especial (5%)
-    if (Math.random() < 0.05) {
-      embed.addFields(
-        { name: '🎁 Bônus Especial!', value: 'Você encontrou um item especial! (Em breve)', inline: false }
-      );
+    if (currentLevel > previousLevel) {
+      embed.addFields({
+        name: '🎉 Level Up!',
+        value: `Parabéns! Você alcançou o nível **${currentLevel}**!`,
+        inline: false
+      });
     }
 
     await interaction.editReply({ embeds: [embed] });
+
+    // Trigger Discord event for daily claim
+    await dataService.triggerDiscordEvent('user_interaction', {
+      type: 'daily_claimed',
+      userId: interaction.user.id,
+      username: interaction.user.username,
+      rewards: result
+    });
 
   } catch (error) {
-    console.error('Erro ao processar daily:', error);
-    
-    const embed = new EmbedBuilder()
+    console.error('❌ Error in daily command:', error);
+
+    let errorMessage = 'Erro interno do servidor.';
+    let errorColor = botConfig.errorColor;
+
+    if (error.message.includes('already claimed')) {
+      errorMessage = 'Você já recebeu sua recompensa diária hoje! Volte amanhã para receber novamente.';
+      errorColor = botConfig.warningColor;
+    }
+
+    const errorEmbed = new EmbedBuilder()
       .setTitle('❌ Erro')
-      .setDescription('Ocorreu um erro ao processar seu daily. Tente novamente mais tarde.')
-      .setColor('#FF4444');
-    
-    await interaction.editReply({ embeds: [embed] });
+      .setDescription(errorMessage)
+      .setColor(errorColor)
+      .setTimestamp();
+
+    await interaction.editReply({ embeds: [errorEmbed] });
   }
 }
