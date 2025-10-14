@@ -9,12 +9,19 @@ services:
       POSTGRES_USER: botuser
       POSTGRES_PASSWORD: botpass
       POSTGRES_DB: marybot
+      POSTGRES_HOST_AUTH_METHOD: md5
+      POSTGRES_INITDB_ARGS: "--auth-host=md5"
     volumes:
       - ./data/postgres:/var/lib/postgresql/data
+      - ./postgresql.conf:/etc/postgresql/postgresql.conf
+      - ./pg_hba.conf:/etc/postgresql/pg_hba.conf
     ports:
-      - "5400:5400"
+      - "5400:5432"
     networks:
       - marybot_network
+    command: >
+      postgres -c config_file=/etc/postgresql/postgresql.conf
+               -c hba_file=/etc/postgresql/pg_hba.conf
 
   bot:
     build: .
