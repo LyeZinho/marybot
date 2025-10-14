@@ -1,0 +1,35 @@
+{
+  "name": "marybot-backend",
+  "version": "1.0.0",
+  "description": "Backend service para MaryBot - Orquestração WebSocket entre serviços",
+  "main": "src/index.js",
+  "type": "module",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "nodemon --watch src --exec node src/index.js"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "dependencies": {
+    "socket.io": "^4.7.2",
+    "ws": "^8.14.2",
+    "dotenv": "^16.3.1",
+    "axios": "^1.6.2",
+    "jsonwebtoken": "^9.0.2",
+    "node-cron": "^3.0.3",
+    "redis": "^4.6.10"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.2"
+  },
+  "keywords": [
+    "websocket",
+    "backend",
+    "orchestration",
+    "microservices",
+    "realtime"
+  ],
+  "author": "LyeZinho",
+  "license": "MIT"
+}

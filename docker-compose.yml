@@ -1,0 +1,44 @@
+version: "3.8"
+
+services:
+  db:
+    image: postgres:16
+    container_name: marybot_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: botuser
+      POSTGRES_PASSWORD: botpass
+      POSTGRES_DB: marybot
+    volumes:
+      - ./data/postgres:/var/lib/postgresql/data
+    ports:
+      - "5400:5400"
+    networks:
+      - marybot_network
+
+  bot:
+    build: .
+    container_name: marybot
+    restart: unless-stopped
+    depends_on:
+      - db
+    environment:
+      DATABASE_URL: "postgresql://botuser:botpass@db:5432/marybot"
+      DISCORD_TOKEN: "${DISCORD_TOKEN}"
+      CLIENT_ID: "${CLIENT_ID}"
+      GUILD_ID: "${GUILD_ID}"
+      NODE_ENV: "production"
+    volumes:
+      - .:/app
+      - /app/node_modules
+    working_dir: /app
+    command: ["npm", "start"]
+    networks:
+      - marybot_network
+
+networks:
+  marybot_network:
+    driver: bridge
+
+volumes:
+  postgres_data:
