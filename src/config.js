@@ -1,9 +1,9 @@
 export default {
   prefix: "m.",
   token: process.env.DISCORD_TOKEN,
-  ownerId: "SEU_ID_AQUI",
+  ownerId: "329720996669947904",
   database: {
-    url: process.env.DATABASE_URL || "postgresql://botuser:botpass@localhost:5432/animebot"
+    url: process.env.DATABASE_URL || "postgresql://botuser:botpass@localhost:5433/marybot"
   },
   colors: {
     primary: 0x5865f2,

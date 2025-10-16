@@ -23,9 +23,27 @@ model User {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  // Stats de combate
+  hp        Int      @default(100)
+  maxHp     Int      @default(100)
+  atk       Int      @default(10)
+  def       Int      @default(5)
+  spd       Int      @default(8)
+  lck       Int      @default(5)
+  
+  // Progressão
+  playerClass   PlayerClass @default(ADVENTURER)
+  skillPoints   Int         @default(0)
+  dungeonXp     Int         @default(0)
+  dungeonLevel  Int         @default(1)
+
   // Relacionamentos
-  transactions Transaction[]
-  inventory    UserItem[]
+  transactions    Transaction[]
+  inventory       UserItem[]
+  dungeonRuns     DungeonRun[]
+  playerSkills    PlayerSkill[]
+  battleLogs      BattleLog[]
+  raidParticipations RaidParticipation[]
 
   @@map("users")
 }
@@ -50,11 +68,15 @@ model Item {
 
 // Relacionamento many-to-many entre usuários e itens
 model UserItem {
-  id       String @id @default(cuid())
-  userId   String
-  itemId   String
-  quantity Int    @default(1)
-  acquiredAt DateTime @default(now())
+  id         String    @id @default(cuid())
+  userId     String
+  itemId     String
+  quantity   Int       @default(1)
+  acquiredAt DateTime  @default(now())
+  
+  // Campos de equipamento
+  isEquipped Boolean   @default(false)
+  equipSlot  String?   // WEAPON, ARMOR, ACCESSORY, etc.
 
   // Relacionamentos
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -106,6 +128,165 @@ model CustomCommand {
   @@map("custom_commands")
 }
 
+// === SISTEMA DE DUNGEON ===
+
+// Modelo para execuções de dungeon
+model DungeonRun {
+  id           String   @id @default(cuid())
+  userId       String
+  seed         String
+  currentFloor Int      @default(1)
+  positionX    Int      @default(0)
+  positionY    Int      @default(0)
+  mapData      Json     // Mapa serializado
+  inventory    Json     // Itens coletados
+  health       Int      @default(100)
+  maxHealth    Int      @default(100)
+  progress     Float    @default(0)
+  biome        BiomeType @default(CRYPT)
+  isActive     Boolean  @default(true)
+  startedAt    DateTime @default(now())
+  completedAt  DateTime?
+
+  // Relacionamentos
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  battleLogs BattleLog[]
+
+  @@map("dungeon_runs")
+}
+
+// Modelo para monstros/mobs
+model Mob {
+  id          String   @id @default(cuid())
+  name        String
+  type        MobType
+  levelMin    Int
+  levelMax    Int
+  description String?
+  emoji       String?
+  
+  // Stats base
+  baseHp      Int
+  baseAtk     Int
+  baseDef     Int
+  baseSpd     Int
+  baseLck     Int
+  
+  // Configurações
+  skills      String[] // IDs das skills
+  lootTable   Json     // Tabela de drops
+  biomes      BiomeType[] // Biomas onde aparece
+  
+  createdAt   DateTime @default(now())
+
+  @@map("mobs")
+}
+
+// Modelo para skills/habilidades
+model Skill {
+  id          String    @id @default(cuid())
+  name        String    @unique
+  description String
+  type        SkillType
+  power       Int       @default(0)
+  accuracy    Float     @default(1.0)
+  cost        Int       @default(0)  // Custo de mana/stamina
+  cooldown    Int       @default(0)  // Turnos de cooldown
+  heal        Int       @default(0)  // Cura
+  effects     Json?     // Efeitos especiais
+  
+  // Requisitos
+  classRequired PlayerClass?
+  levelRequired Int       @default(1)
+  
+  createdAt   DateTime  @default(now())
+
+  // Relacionamentos
+  playerSkills PlayerSkill[]
+
+  @@map("skills")
+}
+
+// Relacionamento entre players e skills
+model PlayerSkill {
+  id      String @id @default(cuid())
+  userId  String
+  skillId String
+  level   Int    @default(1)
+  
+  // Relacionamentos
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  skill Skill @relation(fields: [skillId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, skillId])
+  @@map("player_skills")
+}
+
+// Modelo para logs de batalha
+model BattleLog {
+  id            String   @id @default(cuid())
+  userId        String
+  dungeonRunId  String?
+  raidId        String?
+  mobName       String
+  result        String   // "win", "loss", "flee"
+  damageDealt   Int      @default(0)
+  damageTaken   Int      @default(0)
+  xpGained      Int      @default(0)
+  coinsGained   Int      @default(0)
+  loot          Json?    // Itens dropados
+  duration      Int      @default(0) // Turnos
+  createdAt     DateTime @default(now())
+
+  // Relacionamentos
+  user       User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  dungeonRun DungeonRun? @relation(fields: [dungeonRunId], references: [id], onDelete: Cascade)
+  raid       Raid?       @relation(fields: [raidId], references: [id], onDelete: Cascade)
+
+  @@map("battle_logs")
+}
+
+// === SISTEMA DE RAIDS ===
+
+// Modelo para raids cooperativas
+model Raid {
+  id          String   @id @default(cuid())
+  name        String
+  description String
+  seed        String
+  bossName    String
+  bossHp      Int
+  currentHp   Int
+  maxPlayers  Int      @default(20)
+  isActive    Boolean  @default(true)
+  startedAt   DateTime @default(now())
+  endsAt      DateTime
+  createdAt   DateTime @default(now())
+
+  // Relacionamentos
+  participants RaidParticipation[]
+  battleLogs   BattleLog[]
+
+  @@map("raids")
+}
+
+// Participação em raids
+model RaidParticipation {
+  id           String   @id @default(cuid())
+  userId       String
+  raidId       String
+  damageDealt  Int      @default(0)
+  healsGiven   Int      @default(0)
+  joinedAt     DateTime @default(now())
+
+  // Relacionamentos
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  raid Raid @relation(fields: [raidId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, raidId])
+  @@map("raid_participations")
+}
+
 // Enums
 enum Rarity {
   COMMON
@@ -128,4 +309,72 @@ enum TransactionType {
   SHOP_SELL
   ADMIN_ADD
   ADMIN_REMOVE
+  DUNGEON_REWARD
+  BATTLE_WIN
+  RAID_REWARD
+}
+
+enum PlayerClass {
+  ADVENTURER
+  WARRIOR
+  MAGE
+  ROGUE
+  CLERIC
+  PALADIN
+  NECROMANCER
+  NINJA
+  BERSERKER
+  ARCHMAGE
+}
+
+enum RoomType {
+  EMPTY
+  MONSTER
+  TRAP
+  EVENT
+  BOSS
+  SHOP
+  LOOT
+  ENTRANCE
+  EXIT
+}
+
+enum MobType {
+  BEAST
+  HUMANOID
+  UNDEAD
+  ELEMENTAL
+  DRAGON
+  DEMON
+  CONSTRUCT
+}
+
+enum SkillType {
+  ATTACK
+  HEAL
+  BUFF
+  DEBUFF
+  SPECIAL
+}
+
+enum StatusEffect {
+  POISONED
+  BURNED
+  FROZEN
+  STUNNED
+  BLEEDING
+  REGENERATING
+  BLESSED
+  CURSED
+  HASTE
+  SLOW
+}
+
+enum BiomeType {
+  CRYPT
+  VOLCANO
+  FOREST
+  GLACIER
+  RUINS
+  ABYSS
 }

@@ -7,6 +7,8 @@ Um bot Discord avançado com sistema prefix-based, focado em comandos de anime e
 - 🎯 **Sistema prefix-based** (`m.` por padrão)
 - 🎌 **Comandos de anime** (waifus, citações, etc.)
 - 💰 **Sistema de economia** completo com banco de dados
+- 🏰 **Sistema de Dungeon** com mapas visuais procedurais
+- 🗺️ **Mapas em PNG** gerados dinamicamente com SVG
 - 🗄️ **PostgreSQL** com Prisma ORM
 - 🐳 **Docker** para fácil deploy
 - 📊 **Sistema de logs** avançado
@@ -21,12 +23,14 @@ marybot/
 │  ├─ commands/
 │  │  ├─ core/           # Comandos essenciais (ping, help)
 │  │  ├─ anime/          # Comandos relacionados a anime
+│  │  ├─ dungeon/        # Sistema de exploração de dungeons
 │  │  └─ economy/        # Sistema de economia
 │  ├─ database/
 │  │  ├─ prisma/
 │  │  └─ client.js       # Cliente do banco de dados
 │  ├─ events/            # Eventos do Discord
-│  ├─ utils/             # Utilitários (embeds, logger)
+│  ├─ game/              # Motores de jogo (dungeon, combate)
+│  ├─ utils/             # Utilitários (embeds, mapas visuais, logger)
 │  ├─ config.js          # Configurações do bot
 │  └─ index.js           # Arquivo principal
 ├─ prisma/
@@ -150,6 +154,48 @@ manage.bat studio           # Windows
 - `m.daily` - Recompensa diária
 - `m.profile` - Perfil do usuário
 
+### 🏰 Dungeon (Sistema de Exploração)
+- `m.dungeon start` - Inicia uma nova aventura na dungeon
+- `m.dungeon status` - Mostra status atual da dungeon
+- `m.dungeon exit` - Sai da dungeon atual
+- `m.move [direction]` - Move-se pela dungeon (north/south/east/west)
+- `m.look` - Observa a sala atual em detalhes
+- `m.map` - **Mapa visual em PNG** da dungeon atual
+- `m.map full` - Mapa visual completo da dungeon
+- `m.map text` - Mapa em modo texto (clássico)
+- `m.inventory` - Mostra inventário e equipamentos
+
+#### ⚔️ Sistema de Combate
+- `m.attack` - Ataca inimigos em batalha
+- `m.skill [habilidade]` - Usa habilidades especiais
+- `m.status` - Status da batalha atual
+- `m.run` - Tenta fugir da batalha
+
+#### 🎒 Sistema de Itens
+- `m.loot` - **Coleta tesouros** de salas de loot
+- `m.item [nome]` - **Informações detalhadas** sobre itens
+- `m.item list [categoria]` - Lista todos os itens disponíveis
+- `m.shop` - **Interage com lojas** nas dungeons
+- `m.shop buy [item]` - Compra itens em lojas
+
+#### 🎮 Características do Sistema de Dungeon
+- **Mapas Procedurais**: Cada dungeon é única baseada em seed
+- **Biomas Variados**: Cripta Sombria, Vulcão Ardente, Floresta Perdida, etc.
+- **Mapas Visuais**: Geração automática de mapas em PNG com SVG
+- **Exploração Progressiva**: Descubra salas conforme explora
+- **Sistema de Combate Visual**: Batalhas com mobs únicos e habilidades
+- **Sistema de Itens Completo**: 17+ itens com raridades e efeitos
+- **Diferentes Tipos de Sala**: Monstros, armadilhas, tesouros, lojas, chefes
+- **Persistência**: Progresso salvo no banco de dados PostgreSQL
+
+#### 🎒 Sistema de Itens Detalhado
+- **6 Raridades**: Comum, Incomum, Raro, Épico, Lendário, Mítico
+- **8 Categorias**: Consumíveis, Armas, Armaduras, Acessórios, Materiais, Tesouros, Chaves, Missão
+- **Loot Tables Dinâmicas**: Drops baseados em andar e bioma
+- **Modificadores de Bioma**: Itens especiais por região
+- **Sistema de Preços**: Valores automáticos com multiplicadores de raridade
+- **Lojas Procedurais**: Comerciantes com estoque limitado e preços variáveis
+
 ## 🛠️ Scripts NPM
 
 ```bash
@@ -159,6 +205,53 @@ npm run db:push    # Aplicar schema ao banco
 npm run db:migrate # Criar nova migration
 npm run db:studio  # Abrir Prisma Studio
 npm run db:generate # Gerar cliente Prisma
+```
+
+## 🎮 Exemplos de Uso
+
+### Explorando uma Dungeon
+
+```
+> m.dungeon start
+🏰 Nova Aventura Iniciada!
+Você está em uma Cripta Sombria...
+
+> m.move north
+⬆️ Movimento Realizado
+💰 Sala Atual: Tesouro
+
+> m.loot
+💰 Tesouro Coletado!
+🟢 Poção de Cura Média x2 (Incomum) - 75g
+⚫ Moedas de Ouro x35 - 35g
+
+> m.move east
+🏪 Sala Atual: Loja
+
+> m.shop
+🏪 Loja da Dungeon
+1. ⚫ Poção de Cura Pequena (2 em estoque) - 18 moedas
+2. 🟢 Espada de Ferro (1 em estoque) - 150 moedas
+
+> m.shop buy 1
+🛒 Compra Realizada!
+Você comprou Poção de Cura Pequena por 18 moedas.
+```
+
+### Sistema de Itens
+
+```
+> m.item list
+🎒 Lista de Itens
+🧪 Consumíveis (5): ⚫ Poção de Cura Pequena, 🟢 Poção de Cura Média...
+⚔️ Armas (2): ⚫ Espada de Ferro, 🟢 Espada de Aço...
+🛡️ Armaduras (2): ⚫ Armadura de Couro, 🟢 Cota de Malha...
+
+> m.item espada de ferro
+⚫ Espada de Ferro
+Uma espada bem forjada que oferece bom dano de ataque.
+⚔️ Atributos: ATK: +10, CRIT: +5%
+💰 Valor de Venda: 100 moedas
 ```
 
 ## 🔧 Configuração Avançada

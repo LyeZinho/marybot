@@ -1,12 +1,14 @@
 import { Client, GatewayIntentBits, Collection } from "discord.js";
 import fs from "fs";
 import path from "path";
-import config from "./config.js";
 import dotenv from "dotenv";
+
+// Carregar variáveis de ambiente primeiro
+dotenv.config();
+
+import config from "./config.js";
 import { logger } from "./utils/logger.js";
 import initDatabase, { disconnectDatabase } from "./database/client.js";
-
-dotenv.config();
 
 const client = new Client({
   intents: [
@@ -63,8 +65,11 @@ async function loadEvents() {
         const { default: event } = await import(`./events/${file}`);
         const eventName = file.split(".")[0];
         
-        client.on(eventName, (...args) => event(client, ...args));
-        logger.info(`Evento carregado: ${eventName}`);
+        // Mapear evento 'ready' para 'clientReady' (Discord.js v14.14+)
+        const actualEventName = eventName === 'ready' ? 'clientReady' : eventName;
+        
+        client.on(actualEventName, (...args) => event(client, ...args));
+        logger.info(`Evento carregado: ${eventName} -> ${actualEventName}`);
       } catch (error) {
         logger.error(`Erro ao carregar evento ${file}:`, error);
       }
@@ -82,7 +87,8 @@ async function init() {
     logger.info("🚀 Inicializando MaryBot...");
     
     // Verificar se o token existe
-    if (!config.token) {
+    const token = process.env.DISCORD_TOKEN;
+    if (!token) {
       logger.error("Token do Discord não encontrado! Verifique o arquivo .env");
       process.exit(1);
     }
@@ -90,15 +96,34 @@ async function init() {
     // Inicializar banco de dados
     await initDatabase();
     
+    // Inicializar sistema de mobs
+    try {
+      const { mobManager } = await import("./game/mobManager.js");
+      await mobManager.loadMobData();
+      logger.success("✅ Sistema de mobs inicializado com sucesso!");
+    } catch (error) {
+      logger.warn("⚠️ Erro ao inicializar sistema de mobs:", error.message);
+    }
+
+    // Inicializar sistema de itens
+    try {
+      const { itemManager } = await import("./game/itemManager.js");
+      await itemManager.loadItemData();
+      logger.success("✅ Sistema de itens inicializado com sucesso!");
+    } catch (error) {
+      logger.warn("⚠️ Erro ao inicializar sistema de itens:", error.message);
+    }
+    
     // Carregar comandos e eventos
     await loadCommands();
     await loadEvents();
     
     // Fazer login
-    await client.login(config.token);
+    await client.login(token);
     
   } catch (error) {
-    logger.error("Erro durante a inicialização:", error);
+    logger.error("Erro durante a inicialização:", error.message || error);
+    console.error("Stack trace:", error.stack);
     process.exit(1);
   }
 }

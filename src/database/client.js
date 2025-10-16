@@ -172,6 +172,336 @@ export async function updateLastDaily(discordId) {
   });
 }
 
+// === FUNÇÕES PARA SISTEMA DE DUNGEON ===
+
+// Buscar ou criar dungeon run ativa
+export async function getOrCreateDungeonRun(discordId) {
+  const client = getPrisma();
+  
+  const user = await getOrCreateUser(discordId, 'Unknown');
+  
+  // Verificar se há dungeon ativa
+  let dungeonRun = await client.dungeonRun.findFirst({
+    where: {
+      userId: user.id,
+      isActive: true
+    }
+  });
+  
+  if (!dungeonRun) {
+    // Criar nova dungeon
+    const seed = `${user.id}_${Date.now()}`;
+    dungeonRun = await client.dungeonRun.create({
+      data: {
+        userId: user.id,
+        seed,
+        currentFloor: 1,
+        positionX: 0,
+        positionY: 0,
+        mapData: {},
+        inventory: {},
+        health: user.maxHp,
+        maxHealth: user.maxHp,
+        biome: 'CRYPT'
+      }
+    });
+  }
+  
+  return dungeonRun;
+}
+
+// Atualizar posição do jogador na dungeon
+export async function updateDungeonPosition(discordId, x, y, mapData = null) {
+  const client = getPrisma();
+  
+  const user = await getOrCreateUser(discordId, 'Unknown');
+  
+  const updateData = {
+    positionX: x,
+    positionY: y
+  };
+  
+  if (mapData) {
+    updateData.mapData = mapData;
+  }
+  
+  return await client.dungeonRun.updateMany({
+    where: { 
+      userId: user.id,
+      isActive: true 
+    },
+    data: updateData
+  });
+}
+
+// Atualizar saúde do jogador
+export async function updateDungeonHealth(discordId, health) {
+  const client = getPrisma();
+  
+  const user = await getOrCreateUser(discordId, 'Unknown');
+  
+  return await client.dungeonRun.updateMany({
+    where: { 
+      userId: user.id,
+      isActive: true 
+    },
+    data: { health }
+  });
+}
+
+// Finalizar dungeon run
+export async function finishDungeonRun(dungeonRunId, success = false) {
+  const client = getPrisma();
+  
+  return await client.dungeonRun.update({
+    where: { id: dungeonRunId },
+    data: {
+      isActive: false,
+      completedAt: new Date(),
+      progress: success ? 100 : 50
+    }
+  });
+}
+
+// Criar log de batalha
+export async function createBattleLog(userId, dungeonRunId, mobName, result, damageDealt, damageTaken, xpGained, coinsGained, loot = null) {
+  const client = getPrisma();
+  
+  return await client.battleLog.create({
+    data: {
+      userId,
+      dungeonRunId,
+      mobName,
+      result,
+      damageDealt,
+      damageTaken,
+      xpGained,
+      coinsGained,
+      loot: loot || {}
+    }
+  });
+}
+
+// Buscar mobs por bioma
+export async function getMobsByBiome(biome, level = 1) {
+  const client = getPrisma();
+  
+  return await client.mob.findMany({
+    where: {
+      biomes: {
+        has: biome
+      },
+      levelMin: { lte: level },
+      levelMax: { gte: level }
+    }
+  });
+}
+
+// === SISTEMA DE INVENTÁRIO ===
+
+// Adicionar item ao inventário do usuário
+export async function addItemToInventory(discordId, itemId, quantity = 1) {
+  const client = getPrisma();
+  
+  try {
+    // Buscar usuário
+    const user = await getOrCreateUser(discordId, 'Unknown');
+    
+    // Verificar se o item já existe no inventário
+    const existingUserItem = await client.userItem.findFirst({
+      where: {
+        userId: user.id,
+        itemId: itemId
+      }
+    });
+
+    if (existingUserItem) {
+      // Atualizar quantidade se já existe
+      return await client.userItem.update({
+        where: {
+          id: existingUserItem.id
+        },
+        data: {
+          quantity: existingUserItem.quantity + quantity
+        }
+      });
+    } else {
+      // Criar novo registro se não existe
+      return await client.userItem.create({
+        data: {
+          userId: user.id,
+          itemId: itemId,
+          quantity: quantity
+        }
+      });
+    }
+  } catch (error) {
+    console.error('Erro ao adicionar item ao inventário:', error);
+    throw error;
+  }
+}
+
+// Remover item do inventário
+export async function removeItemFromInventory(discordId, itemId, quantity = 1) {
+  const client = getPrisma();
+  
+  try {
+    const user = await getOrCreateUser(discordId, 'Unknown');
+    
+    const userItem = await client.userItem.findFirst({
+      where: {
+        userId: user.id,
+        itemId: itemId
+      }
+    });
+
+    if (!userItem) {
+      return null; // Item não encontrado
+    }
+
+    if (userItem.quantity <= quantity) {
+      // Remove completamente se a quantidade for menor ou igual
+      await client.userItem.delete({
+        where: {
+          id: userItem.id
+        }
+      });
+      return null;
+    } else {
+      // Reduz a quantidade
+      return await client.userItem.update({
+        where: {
+          id: userItem.id
+        },
+        data: {
+          quantity: userItem.quantity - quantity
+        }
+      });
+    }
+  } catch (error) {
+    console.error('Erro ao remover item do inventário:', error);
+    throw error;
+  }
+}
+
+// Buscar inventário do usuário
+export async function getUserInventory(discordId) {
+  const client = getPrisma();
+  
+  try {
+    const user = await getOrCreateUser(discordId, 'Unknown');
+    
+    return await client.userItem.findMany({
+      where: {
+        userId: user.id
+      },
+      orderBy: [
+        { isEquipped: 'desc' },
+        { itemId: 'asc' }
+      ]
+    });
+  } catch (error) {
+    console.error('Erro ao buscar inventário:', error);
+    return [];
+  }
+}
+
+// Equipar item
+export async function equipItem(discordId, itemId, slot = null) {
+  const client = getPrisma();
+  
+  try {
+    const user = await getOrCreateUser(discordId, 'Unknown');
+    
+    // Encontrar o item no inventário
+    const userItem = await client.userItem.findFirst({
+      where: {
+        userId: user.id,
+        itemId: itemId
+      }
+    });
+
+    if (!userItem) {
+      return { success: false, error: 'Item não encontrado no inventário' };
+    }
+
+    // Desequipar outros itens do mesmo slot (se aplicável)
+    if (slot) {
+      await client.userItem.updateMany({
+        where: {
+          userId: user.id,
+          equipSlot: slot
+        },
+        data: {
+          isEquipped: false,
+          equipSlot: null
+        }
+      });
+    }
+
+    // Equipar o item
+    const result = await client.userItem.update({
+      where: {
+        id: userItem.id
+      },
+      data: {
+        isEquipped: true,
+        equipSlot: slot
+      }
+    });
+
+    return { success: true, item: result };
+  } catch (error) {
+    console.error('Erro ao equipar item:', error);
+    return { success: false, error: 'Erro interno' };
+  }
+}
+
+// Desequipar item
+export async function unequipItem(discordId, itemId) {
+  const client = getPrisma();
+  
+  try {
+    const user = await getOrCreateUser(discordId, 'Unknown');
+    
+    const result = await client.userItem.updateMany({
+      where: {
+        userId: user.id,
+        itemId: itemId,
+        isEquipped: true
+      },
+      data: {
+        isEquipped: false,
+        equipSlot: null
+      }
+    });
+
+    return result.count > 0;
+  } catch (error) {
+    console.error('Erro ao desequipar item:', error);
+    return false;
+  }
+}
+
+// Buscar itens equipados
+export async function getEquippedItems(discordId) {
+  const client = getPrisma();
+  
+  try {
+    const user = await getOrCreateUser(discordId, 'Unknown');
+    
+    return await client.userItem.findMany({
+      where: {
+        userId: user.id,
+        isEquipped: true
+      }
+    });
+  } catch (error) {
+    console.error('Erro ao buscar itens equipados:', error);
+    return [];
+  }
+}
+
 // Exportar instância do Prisma (para compatibilidade)
 export { prisma };
 
