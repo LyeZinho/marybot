@@ -1,23 +1,21 @@
 version: "3.8"
 
 services:
-  # PostgreSQL Database
+  # Banco de dados PostgreSQL
   db:
-    image: postgres:16
+    image: postgres:16-alpine
     container_name: marybot_db
     restart: unless-stopped
     environment:
       POSTGRES_USER: botuser
       POSTGRES_PASSWORD: botpass
       POSTGRES_DB: marybot
-      POSTGRES_HOST_AUTH_METHOD: md5
-      POSTGRES_INITDB_ARGS: "--auth-host=md5"
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale=C"
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./postgresql.conf:/etc/postgresql/postgresql.conf:ro
-      - ./pg_hba.conf:/etc/postgresql/pg_hba.conf:ro
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql:ro
     ports:
-      - "5400:5432"
+      - "5432:5432"
     networks:
       - marybot_network
     healthcheck:
@@ -25,128 +23,55 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
-    command: >
-      postgres -c config_file=/etc/postgresql/postgresql.conf
-               -c hba_file=/etc/postgresql/pg_hba.conf
 
-  # API Service (REST + Database)
-  api:
-    build:
-      context: ./api
+  # Bot Discord
+  bot:
+    build: 
+      context: .
       dockerfile: Dockerfile
-    container_name: marybot_api
+    container_name: marybot
     restart: unless-stopped
     depends_on:
       db:
         condition: service_healthy
     environment:
-      DATABASE_URL: "postgresql://botuser:botpass@db:5432/marybot"
-      API_PORT: 3001
-      JWT_SECRET: "${JWT_SECRET:-your-super-secret-jwt-key}"
-      ALLOWED_ORIGINS: "http://localhost:3000,http://localhost:3002,http://localhost:3003,http://backend:3002,http://admin-panel:3003"
-      NODE_ENV: "production"
-    ports:
-      - "3001:3001"
-    networks:
-      - marybot_network
-    volumes:
-      - ./api:/app
-      - /app/node_modules
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3001/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-
-  # Backend Service (WebSocket Orchestration)
-  backend:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
-    container_name: marybot_backend
-    restart: unless-stopped
-    depends_on:
-      api:
-        condition: service_healthy
-    environment:
-      API_SERVICE_URL: "http://api:3001"
-      BACKEND_PORT: 3002
-      SERVICE_TOKEN: "${SERVICE_TOKEN:-backend-service-token}"
-      NODE_ENV: "production"
-    ports:
-      - "3002:3002"
-    networks:
-      - marybot_network
-    volumes:
-      - ./backend:/app
-      - /app/node_modules
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3002/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-
-  # Bot Service (Discord Interface)
-  bot:
-    build:
-      context: ./bot
-      dockerfile: Dockerfile
-    container_name: marybot_bot
-    restart: unless-stopped
-    depends_on:
-      backend:
-        condition: service_healthy
-    environment:
+      NODE_ENV: production
+      DATABASE_URL: "postgresql://botuser:botpass@db:5432/marybot?schema=public"
       DISCORD_TOKEN: "${DISCORD_TOKEN}"
-      CLIENT_ID: "${CLIENT_ID}"
-      GUILD_ID: "${GUILD_ID}"
-      BACKEND_SERVICE_URL: "http://backend:3002"
-      USE_WEBSOCKET: "true"
-      ENABLE_FALLBACK: "true"
-      NODE_ENV: "production"
+    volumes:
+      - ./src:/app/src:ro
+      - ./package.json:/app/package.json:ro
+      - ./prisma:/app/prisma:ro
     networks:
       - marybot_network
-    volumes:
-      - ./bot:/app
-      - /app/node_modules
-    healthcheck:
-      test: ["CMD", "node", "-e", "process.exit(0)"]
-      interval: 60s
-      timeout: 10s
-      retries: 3
+    command: ["npm", "start"]
 
-  # Admin Panel (Next.js Interface)
-  admin-panel:
-    build:
-      context: ./admin-panel
+  # Prisma Studio (opcional - para desenvolvimento)
+  prisma-studio:
+    build: 
+      context: .
       dockerfile: Dockerfile
-    container_name: marybot_admin
-    restart: unless-stopped
+    container_name: marybot_studio
+    restart: "no"
     depends_on:
-      backend:
+      db:
         condition: service_healthy
     environment:
-      API_SERVICE_URL: "http://api:3001"
-      BACKEND_SERVICE_URL: "http://backend:3002"
-      NEXTAUTH_URL: "http://localhost:3003"
-      ENABLE_REALTIME: "true"
-      NODE_ENV: "production"
+      DATABASE_URL: "postgresql://botuser:botpass@db:5432/marybot?schema=public"
+    volumes:
+      - ./prisma:/app/prisma:ro
     ports:
-      - "3003:3003"
+      - "5555:5555"
     networks:
       - marybot_network
-    volumes:
-      - ./admin-panel:/app
-      - /app/node_modules
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3003/api/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
+    command: ["npx", "prisma", "studio", "--hostname", "0.0.0.0"]
+    profiles:
+      - dev
+
+volumes:
+  postgres_data:
+    driver: local
 
 networks:
   marybot_network:
     driver: bridge
-
-volumes:
-  postgres_data:

@@ -1,0 +1,131 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// Modelo de usuário para sistema de economia
+model User {
+  id        String   @id @default(cuid())
+  discordId String   @unique
+  username  String
+  coins     Int      @default(0)
+  bank      Int      @default(0)
+  xp        Int      @default(0)
+  level     Int      @default(1)
+  lastDaily DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relacionamentos
+  transactions Transaction[]
+  inventory    UserItem[]
+
+  @@map("users")
+}
+
+// Modelo de itens no jogo
+model Item {
+  id          String @id @default(cuid())
+  name        String @unique
+  description String
+  price       Int
+  rarity      Rarity @default(COMMON)
+  category    String
+  emoji       String?
+  tradeable   Boolean @default(true)
+  createdAt   DateTime @default(now())
+
+  // Relacionamentos
+  userItems UserItem[]
+
+  @@map("items")
+}
+
+// Relacionamento many-to-many entre usuários e itens
+model UserItem {
+  id       String @id @default(cuid())
+  userId   String
+  itemId   String
+  quantity Int    @default(1)
+  acquiredAt DateTime @default(now())
+
+  // Relacionamentos
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  item Item @relation(fields: [itemId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, itemId])
+  @@map("user_items")
+}
+
+// Modelo de transações financeiras
+model Transaction {
+  id        String          @id @default(cuid())
+  userId    String
+  type      TransactionType
+  amount    Int
+  reason    String
+  createdAt DateTime        @default(now())
+
+  // Relacionamentos
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("transactions")
+}
+
+// Modelo para configurações de servidor
+model Guild {
+  id        String   @id
+  name      String
+  prefix    String?  @default("m.")
+  language  String   @default("pt-BR")
+  timezone  String   @default("America/Sao_Paulo")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("guilds")
+}
+
+// Modelo para comandos personalizados por servidor
+model CustomCommand {
+  id        String   @id @default(cuid())
+  guildId   String
+  name      String
+  content   String
+  createdBy String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([guildId, name])
+  @@map("custom_commands")
+}
+
+// Enums
+enum Rarity {
+  COMMON
+  UNCOMMON
+  RARE
+  EPIC
+  LEGENDARY
+  MYTHIC
+}
+
+enum TransactionType {
+  DAILY
+  WORK
+  CRIME
+  GAMBLE_WIN
+  GAMBLE_LOSS
+  TRANSFER_SENT
+  TRANSFER_RECEIVED
+  SHOP_BUY
+  SHOP_SELL
+  ADMIN_ADD
+  ADMIN_REMOVE
+}
