@@ -62,21 +62,33 @@ cp .env.example .env
 Edite o arquivo `.env` com suas configurações:
 ```env
 DISCORD_TOKEN=seu_token_aqui
-DATABASE_URL="postgresql://botuser:botpass@localhost:5432/marybot?schema=public"
+DATABASE_URL="postgresql://botuser:botpass@localhost:5433/marybot?schema=public"
 OWNER_ID=seu_id_discord
 ```
+
+**Importante**: Note que a porta do banco é **5433** (não 5432) para evitar conflitos.
 
 ### 4. Configure o banco de dados
 
 #### Opção A: Docker (Recomendado)
 ```bash
+# Iniciar apenas o banco de dados
 docker-compose up -d db
+
+# OU usar o script de gerenciamento
+./manage.sh start-db        # Linux/Mac
+manage.bat start-db         # Windows
+
+# Aplicar schema do banco
 npm run db:push
 ```
+
+**Nota**: O banco será iniciado na porta **5433** para evitar conflitos com PostgreSQL locais.
 
 #### Opção B: PostgreSQL local
 ```bash
 # Instale PostgreSQL e crie o banco 'marybot'
+# Atualize a DATABASE_URL no .env para sua configuração
 npm run db:push
 ```
 
@@ -91,6 +103,9 @@ npm start
 ```bash
 # Iniciar apenas o banco
 docker-compose up -d db
+# OU usar script
+./manage.sh start-db        # Linux/Mac
+manage.bat start-db         # Windows
 
 # Executar bot localmente
 npm run dev
@@ -100,15 +115,24 @@ npm run dev
 ```bash
 # Construir e executar tudo
 docker-compose up -d
+# OU usar script
+./manage.sh start-all       # Linux/Mac
+manage.bat start-all        # Windows
 
 # Ver logs
 docker-compose logs -f bot
+# OU usar script
+./manage.sh logs-bot        # Linux/Mac
+manage.bat logs-bot         # Windows
 ```
 
 ### Prisma Studio (Opcional)
 ```bash
 # Iniciar interface web do banco
 docker-compose --profile dev up prisma-studio
+# OU usar script
+./manage.sh studio          # Linux/Mac
+manage.bat studio           # Windows
 # Acesse: http://localhost:5555
 ```
 
@@ -199,6 +223,48 @@ O sistema de logs inclui:
 - ⏰ Sistema de **cooldown**
 - 👑 Comandos **apenas para owner**
 - 🛡️ **Validação** de entrada
+
+## 🔧 Resolução de Problemas
+
+### Porta 5432 já está em uso
+```bash
+# O bot usa porta 5433 por padrão para evitar conflitos
+# Se ainda houver conflito, edite docker-compose.yml:
+# ports: - "NOVA_PORTA:5432"
+```
+
+### Bot não conecta ao banco
+```bash
+# Verificar se o banco está rodando
+docker-compose ps
+
+# Ver logs do banco
+./manage.sh logs-db        # Linux/Mac
+manage.bat logs-db         # Windows
+
+# Reiniciar serviços
+./manage.sh restart        # Linux/Mac
+manage.bat restart         # Windows
+```
+
+### Erro "Token inválido"
+```bash
+# Verificar se o .env está configurado corretamente
+cat .env                   # Linux/Mac
+type .env                  # Windows
+
+# Verificar se o token está correto no Discord Developer Portal
+```
+
+### Comandos não funcionam
+```bash
+# Verificar logs do bot
+./manage.sh logs-bot       # Linux/Mac
+manage.bat logs-bot        # Windows
+
+# Verificar se o bot tem permissões no servidor Discord
+# Verificar se o prefix está correto (padrão: m.)
+```
 
 ## 🤝 Contribuindo
 
