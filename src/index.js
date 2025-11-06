@@ -15,7 +15,11 @@ const client = new Client({
     GatewayIntentBits.Guilds,
     GatewayIntentBits.GuildMessages,
     GatewayIntentBits.MessageContent,
+    GatewayIntentBits.GuildMessageReactions, // necessário para collectors de reações
+    GatewayIntentBits.GuildVoiceStates, // necessário para detectar mudanças em canais de voz
+    GatewayIntentBits.GuildMembers, // necessário para detectar novos membros (boas-vindas)
   ],
+  partials: ['MESSAGE', 'CHANNEL', 'REACTION'], // permitir lidar com reações em mensagens parcialmente carregadas
 });
 
 client.commands = new Collection();
@@ -112,6 +116,42 @@ async function init() {
       logger.success("✅ Sistema de itens inicializado com sucesso!");
     } catch (error) {
       logger.warn("⚠️ Erro ao inicializar sistema de itens:", error.message);
+    }
+
+    // Inicializar sistema de quests
+    try {
+      const { questManager } = await import("./game/questManager.js");
+      await questManager.initialize();
+      logger.success("✅ Sistema de quests inicializado com sucesso!");
+    } catch (error) {
+      logger.warn("⚠️ Erro ao inicializar sistema de quests:", error.message);
+    }
+
+    // Inicializar sistema de crafting
+    try {
+      const { craftingManager } = await import("./game/craftingManager.js");
+      await craftingManager.initialize();
+      logger.success("✅ Sistema de crafting inicializado com sucesso!");
+    } catch (error) {
+      logger.warn("⚠️ Erro ao inicializar sistema de crafting:", error.message);
+    }
+
+    // Inicializar sistema de threads temporárias
+    try {
+      const { threadManager } = await import("./game/threadManager.js");
+      await threadManager.initialize(client);
+      logger.success("✅ Sistema de salas temporárias inicializado com sucesso!");
+    } catch (error) {
+      logger.warn("⚠️ Erro ao inicializar sistema de threads:", error.message);
+    }
+
+    // Inicializar sistema de canais de voz extensíveis
+    try {
+      const { voiceManager } = await import("./game/voiceManager.js");
+      await voiceManager.initialize(client);
+      logger.success("✅ Sistema de canais de voz extensíveis inicializado com sucesso!");
+    } catch (error) {
+      logger.warn("⚠️ Erro ao inicializar sistema de voz:", error.message);
     }
     
     // Carregar comandos e eventos

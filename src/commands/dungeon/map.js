@@ -1,6 +1,7 @@
 import config from "../../config.js";
 import { getOrCreateUser, getOrCreateDungeonRun } from "../../database/client.js";
 import { mapRenderer } from "../../utils/mapRenderer.js";
+import { dungeonProgressTracker } from "../../game/dungeonProgressTracker.js";
 import { AttachmentBuilder } from "discord.js";
 
 export default {
@@ -51,12 +52,31 @@ export default {
       });
       
       try {
+        // Carregar progresso inteligente
+        if (dungeonRun.visitedRooms) {
+          dungeonProgressTracker.loadProgress(dungeonRun.visitedRooms);
+        }
+        
         const mapMode = showFull ? 'full' : 'local';
-        const mapData = await mapRenderer.generateMap(dungeon, playerX, playerY, mapMode, 'png');
+        
+        // Gerar mapa com trilha inteligente (sempre false para showAll)
+        const mapSvg = mapRenderer.generateMapSVG(
+          dungeon, 
+          playerX, 
+          playerY, 
+          false, // Nunca mostrar salas não descobertas
+          mapMode,
+          dungeonRun.seed,
+          dungeonRun.currentFloor,
+          dungeonRun.visitedRooms || ''
+        );
+        
+        // Converter SVG para PNG
+        const mapPng = await mapRenderer.svgToPng(mapSvg);
         
         // Criar attachment do PNG
-        const attachment = new AttachmentBuilder(mapData.png, {
-          name: `mapa_${dungeonRun.seed.slice(-8)}_${mapMode}.png`
+        const attachment = new AttachmentBuilder(mapPng, {
+          name: `mapa_inteligente_${dungeonRun.seed.slice(-8)}_${mapMode}.png`
         });
         
         // Criar embed com estatísticas
@@ -77,7 +97,7 @@ export default {
           fields: [
             {
               name: "📍 Posição Atual",
-              value: `(${playerX}, ${playerY}) - ${this.getRoomTypeName(dungeon.grid[playerY][playerX]?.type)}`,
+              value: `(${playerX}, ${playerY}) - ${this.getRoomTypeName(dungeon.grid[playerX][playerY]?.type)}`,
               inline: true
             },
             {
@@ -130,6 +150,16 @@ export default {
   },
   
   async createMapEmbed(dungeonRun, dungeon, playerX, playerY, showFull) {
+    // Carregar progresso do sistema inteligente
+    if (dungeonRun.visitedRooms) {
+      dungeonProgressTracker.loadProgress(dungeonRun.visitedRooms);
+    }
+    
+    // Gerar relatório de progresso
+    const progressReport = dungeonProgressTracker.generateExplorationReport(
+      dungeonRun.seed, 
+      dungeonRun.currentFloor
+    );
     const biomeEmojis = {
       'CRYPT': '💀',
       'VOLCANO': '🌋',
@@ -192,8 +222,12 @@ export default {
           inline: true
         },
         {
-          name: "📊 Exploração",
-          value: `${stats.discovered}/${stats.total} salas (${stats.percentage.toFixed(1)}%)`,
+          name: "📊 Exploração Inteligente",
+          value: [
+            `**Algoritmica:** ${progressReport.roomsVisited}/${progressReport.estimatedTotalRooms} (${progressReport.explorationPercentage}%)`,
+            `**Tradicional:** ${stats.discovered}/${stats.total} (${stats.percentage.toFixed(1)}%)`,
+            `**Especiais:** ${progressReport.specialRoomsFound}`
+          ].join('\n'),
           inline: true
         },
         {

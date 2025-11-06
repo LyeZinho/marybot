@@ -1,0 +1,10 @@
+-- AlterTable
+ALTER TABLE "guild_configs" ADD COLUMN     "roomAllowExtension" BOOLEAN NOT NULL DEFAULT true,
+ADD COLUMN     "roomAutoCleanup" BOOLEAN NOT NULL DEFAULT true,
+ADD COLUMN     "roomDefaultTimeout" INTEGER NOT NULL DEFAULT 30,
+ADD COLUMN     "roomEnabled" BOOLEAN NOT NULL DEFAULT true,
+ADD COLUMN     "roomMaxExtension" INTEGER NOT NULL DEFAULT 60,
+ADD COLUMN     "roomMaxPerUser" INTEGER NOT NULL DEFAULT 3,
+ADD COLUMN     "roomMaxTimeout" INTEGER NOT NULL DEFAULT 480,
+ADD COLUMN     "roomMinTimeout" INTEGER NOT NULL DEFAULT 5,
+ADD COLUMN     "roomRequiredRole" TEXT;

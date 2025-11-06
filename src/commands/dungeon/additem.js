@@ -7,7 +7,7 @@ export default {
   name: "additem",
   aliases: ["give", "add"],
   description: "[TESTE] Adiciona itens ao inventário para teste.",
-  category: "dungeon",
+  category: "admin",
   usage: "additem <item_id> [quantidade]",
   cooldown: 1000,
   ownerOnly: true, // Apenas para testes

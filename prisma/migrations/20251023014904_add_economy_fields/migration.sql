@@ -1,0 +1,5 @@
+-- AlterTable
+ALTER TABLE "users" ADD COLUMN     "dailyStreak" INTEGER NOT NULL DEFAULT 0,
+ADD COLUMN     "lastBeg" TIMESTAMP(3),
+ADD COLUMN     "lastWork" TIMESTAMP(3),
+ADD COLUMN     "longestStreak" INTEGER NOT NULL DEFAULT 0;

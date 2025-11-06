@@ -28,7 +28,7 @@ export default {
       }
 
       // Verificar se é o turno do jogador
-      const currentTurn = battle.turnOrder[battle.turn % battle.turnOrder.length];
+      const currentTurn = battle.turnOrder[0];
       if (currentTurn.type !== 'player') {
         return message.reply({
           embeds: [{

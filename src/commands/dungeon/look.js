@@ -226,28 +226,60 @@ export default {
           inline: false
         });
         break;
+
+      case 'WORKSHOP':
+        embed.fields.push({
+          name: "🔨 Oficina de Ferreiro",
+          value: `Uma forja e bigorna estão disponíveis!\n\nUse \`${config.prefix}craft\` para ver receitas de armas e armaduras.\nEsta estação permite crafting avançado de equipamentos.`,
+          inline: false
+        });
+        break;
+
+      case 'ALCHEMY':
+        embed.fields.push({
+          name: "⚗️ Laboratório de Alquimia", 
+          value: `Equipamento alquímico está montado aqui!\n\nUse \`${config.prefix}craft\` para preparar poções e elixires.\nEsta estação é ideal para criar consumíveis.`,
+          inline: false
+        });
+        break;
+
+      case 'ENCHANTING':
+        embed.fields.push({
+          name: "✨ Mesa de Encantamento",
+          value: `Cristais mágicos flutuam ao redor da mesa!\n\nUse \`${config.prefix}craft\` para criar itens encantados.\nEsta estação permite crafting de itens mágicos poderosos.`,
+          inline: false
+        });
+        break;
     }
   },
   
   getAvailableExits(dungeon, x, y) {
-    const directions = [
-      { name: 'Norte', dir: 'north', dx: 0, dy: -1, emoji: '⬆️' },
-      { name: 'Sul', dir: 'south', dx: 0, dy: 1, emoji: '⬇️' },
-      { name: 'Leste', dir: 'east', dx: 1, dy: 0, emoji: '➡️' },
-      { name: 'Oeste', dir: 'west', dx: -1, dy: 0, emoji: '⬅️' }
-    ];
+    const directions = {
+      'north': { name: 'Norte', emoji: '⬆️', dx: 0, dy: -1 },
+      'south': { name: 'Sul', emoji: '⬇️', dx: 0, dy: 1 },
+      'east': { name: 'Leste', emoji: '➡️', dx: 1, dy: 0 },
+      'west': { name: 'Oeste', emoji: '⬅️', dx: -1, dy: 0 }
+    };
     
+    const currentRoom = dungeon.grid[x][y];
     const exits = [];
     
-    for (const dir of directions) {
-      const newX = x + dir.dx;
-      const newY = y + dir.dy;
-      
-      if (this.isValidPosition(newX, newY, dungeon)) {
-        const room = dungeon.grid[newX][newY];
-        const discovered = room.discovered ? '' : ' (inexplorado)';
-        const roomIcon = this.getRoomIcon(room.type);
-        exits.push(`${dir.emoji} **${dir.name}** ${roomIcon}${discovered}`);
+    // Usar as saídas definidas na sala
+    if (currentRoom && currentRoom.exits) {
+      for (const exitDir of currentRoom.exits) {
+        const dir = directions[exitDir];
+        if (dir) {
+          const newX = x + dir.dx;
+          const newY = y + dir.dy;
+          
+          // Verificar se a posição de destino é válida
+          if (this.isValidPosition(newX, newY, dungeon)) {
+            const targetRoom = dungeon.grid[newX][newY];
+            const discovered = targetRoom.discovered ? '' : ' (inexplorado)';
+            const roomIcon = this.getRoomIcon(targetRoom.type);
+            exits.push(`${dir.emoji} **${dir.name}** ${roomIcon}${discovered}`);
+          }
+        }
       }
     }
     
@@ -260,7 +292,7 @@ export default {
     }
     
     const room = dungeon.grid[x][y];
-    return room && room.type !== 'WALL';
+    return room && room.type !== 'WALL' && !room.isObstacle && room.type !== 'OBSTACLE';
   },
   
   getRoomIcon(type) {

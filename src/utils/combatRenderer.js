@@ -2,6 +2,7 @@
 // Gera interfaces de batalha em SVG e converte para PNG
 import Sharp from 'sharp';
 import path from 'path';
+import fs from 'fs';
 import { fileURLToPath } from 'url';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -12,6 +13,10 @@ export class CombatRenderer {
     this.baseWidth = 800;
     this.baseHeight = 600;
     this.assetsPath = path.join(__dirname, '../../assets');
+    this.mobSpritesPath = path.join(this.assetsPath, 'mobs');
+    
+    // Cache para imagens carregadas
+    this.imageCache = new Map();
     
     // Cores temáticas para diferentes tipos de combate
     this.themes = {
@@ -81,7 +86,7 @@ export class CombatRenderer {
    */
   async generateBattleImage(battleState, biome = 'default', options = {}) {
     const theme = this.themes[biome.toLowerCase()] || this.themes.default;
-    const svg = this.generateBattleSVG(battleState, theme, options);
+    const svg = await this.generateBattleSVG(battleState, theme, options);
     
     return await this.svgToPng(svg, {
       width: this.baseWidth,
@@ -93,7 +98,7 @@ export class CombatRenderer {
   /**
    * Gera SVG da interface de batalha
    */
-  generateBattleSVG(battleState, theme, options = {}) {
+  async generateBattleSVG(battleState, theme, options = {}) {
     const { player, mob, turn, logs } = battleState;
     const showLogs = options.showLogs !== false;
     const logCount = options.logCount || 6;
@@ -138,7 +143,7 @@ export class CombatRenderer {
         ${this.generateVSDivider(theme)}
         
         <!-- Mob Area (Right) -->
-        ${this.generateMobArea(mob, mobHpPercent, mobHpColor, theme)}
+        ${await this.generateMobArea(mob, mobHpPercent, mobHpColor, theme)}
         
         <!-- Battle Logs (Bottom) -->
         ${showLogs ? this.generateBattleLogs(recentLogs, theme) : ''}
@@ -207,11 +212,30 @@ export class CombatRenderer {
     `;
   }
 
-  generateMobArea(mob, hpPercent, hpColor, theme) {
+  async generateMobArea(mob, hpPercent, hpColor, theme) {
     const areaWidth = 350;
     const areaHeight = 200;
     const x = 430;
     const y = 80;
+    
+    // Carregar sprite do mob
+    const mobSprite = await this.loadMobSprite(mob.sprite);
+    
+    let spriteElement;
+    if (mobSprite) {
+      spriteElement = `
+        <image x="${x + 60}" y="${y + 80}" width="120" height="100" 
+               href="${mobSprite}" preserveAspectRatio="xMidYMid meet"/>
+      `;
+    } else {
+      // Fallback para emoji se imagem não carregar
+      spriteElement = `
+        <rect x="${x + 60}" y="${y + 80}" width="120" height="100" 
+              fill="${theme.border}" stroke="${theme.text}" stroke-width="2" rx="10"/>
+        <text x="${x + 120}" y="${y + 135}" text-anchor="middle" fill="${theme.text}" 
+              font-family="Arial, sans-serif" font-size="16">👹</text>
+      `;
+    }
     
     return `
       <g id="mobArea">
@@ -241,11 +265,8 @@ export class CombatRenderer {
           📊 Nível ${mob.level || 1} • ${mob.type || 'Mob'} • ${mob.rarity || 'Common'}
         </text>
         
-        <!-- Mob Sprite Placeholder -->
-        <rect x="${x + 60}" y="${y + 80}" width="120" height="100" 
-              fill="${theme.border}" stroke="${theme.text}" stroke-width="2" rx="10"/>
-        <text x="${x + 120}" y="${y + 135}" text-anchor="middle" fill="${theme.text}" 
-              font-family="Arial, sans-serif" font-size="16">👹</text>
+        <!-- Mob Sprite -->
+        ${spriteElement}
       </g>
     `;
   }
@@ -438,6 +459,48 @@ export class CombatRenderer {
     `;
     
     return await this.svgToPng(svg, { width: 400, height: 200 });
+  }
+
+  /**
+   * Carrega uma imagem de mob e converte para base64
+   * @param {string} spriteName - Nome do arquivo de sprite
+   * @returns {string} Data URL da imagem ou null se não encontrada
+   */
+  async loadMobSprite(spriteName) {
+    if (!spriteName) return null;
+    
+    // Verificar cache primeiro
+    if (this.imageCache.has(spriteName)) {
+      return this.imageCache.get(spriteName);
+    }
+    
+    try {
+      const spritePath = path.join(this.mobSpritesPath, spriteName);
+      
+      // Verificar se arquivo existe
+      if (!fs.existsSync(spritePath)) {
+        console.warn(`Sprite não encontrado: ${spritePath}`);
+        return null;
+      }
+      
+      // Carregar e redimensionar imagem
+      const imageBuffer = await Sharp(spritePath)
+        .resize(100, 80, { fit: 'contain', background: { r: 0, g: 0, b: 0, alpha: 0 } })
+        .png()
+        .toBuffer();
+      
+      // Converter para base64
+      const base64 = imageBuffer.toString('base64');
+      const dataUrl = `data:image/png;base64,${base64}`;
+      
+      // Armazenar no cache
+      this.imageCache.set(spriteName, dataUrl);
+      
+      return dataUrl;
+    } catch (error) {
+      console.error(`Erro ao carregar sprite ${spriteName}:`, error);
+      return null;
+    }
   }
 }
 

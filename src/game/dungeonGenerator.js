@@ -73,8 +73,8 @@ export class DungeonGenerator {
     // Preencher grid com salas
     this.fillGrid(grid, mainPath, entrance, boss);
     
-    // Conectar salas adjacentes
-    this.connectRooms(grid, mapSize);
+    // Conectar salas adjacentes com saídas inteligentes
+    this.connectRoomsWithSmartExits(grid, mapSize);
     
     return {
       size: mapSize,
@@ -94,7 +94,8 @@ export class DungeonGenerator {
         discovered: false,
         exits: [],
         content: null,
-        description: ''
+        description: '',
+        isObstacle: false // Nova propriedade para identificar obstáculos
       }))
     );
   }
@@ -143,10 +144,21 @@ export class DungeonGenerator {
           room.type = this.getMainPathRoomType();
           room.description = this.getRoomDescription(room.type);
         } else if (this.rng.random() < 0.7) { // 70% chance de ter sala
-          room.type = this.getRandomRoomType();
+          let roomType = this.getRandomRoomType();
+          // Se gerar obstáculo no caminho principal, substituir por sala vazia
+          if (roomType === 'OBSTACLE' && isOnMainPath) {
+            roomType = 'EMPTY';
+          }
+          room.type = roomType;
           room.description = this.getRoomDescription(room.type);
+          
+          // Marcar como obstáculo se necessário
+          if (roomType === 'OBSTACLE') {
+            room.isObstacle = true;
+          }
         } else {
           room.type = null; // Sem sala (parede)
+          room.content = null;
           continue;
         }
         
@@ -163,8 +175,8 @@ export class DungeonGenerator {
   }
 
   getRandomRoomType() {
-    const types = ['MONSTER', 'TRAP', 'LOOT', 'SHOP', 'EVENT', 'EMPTY'];
-    const weights = [0.35, 0.15, 0.2, 0.1, 0.1, 0.1];
+    const types = ['MONSTER', 'TRAP', 'LOOT', 'SHOP', 'EVENT', 'EMPTY', 'OBSTACLE', 'WORKSHOP', 'ALCHEMY', 'ENCHANTING'];
+    const weights = [0.26, 0.10, 0.15, 0.07, 0.07, 0.10, 0.10, 0.05, 0.05, 0.05]; // Crafting stations: 15% total
     return this.weightedChoice(types, weights);
   }
 
@@ -182,31 +194,48 @@ export class DungeonGenerator {
     return items[items.length - 1];
   }
 
-  connectRooms(grid, size) {
+
+
+  // Conecta salas com sistema inteligente de saídas
+  connectRoomsWithSmartExits(grid, size) {
     for (let x = 0; x < size; x++) {
       for (let y = 0; y < size; y++) {
         const room = grid[x][y];
-        if (!room.type) continue; // Pular paredes
+        if (!room.type || room.isObstacle) continue; // Pular obstáculos
         
         // Verificar conexões com salas adjacentes
         const directions = [
-          { dir: 'north', dx: -1, dy: 0 },
-          { dir: 'south', dx: 1, dy: 0 },
-          { dir: 'east', dx: 0, dy: 1 },
-          { dir: 'west', dx: 0, dy: -1 }
+          { dir: 'north', dx: 0, dy: -1 },
+          { dir: 'south', dx: 0, dy: 1 },
+          { dir: 'east', dx: 1, dy: 0 },
+          { dir: 'west', dx: -1, dy: 0 }
         ];
+        
+        // Calcular saídas possíveis (não bloqueadas)
+        const possibleExits = [];
         
         for (const { dir, dx, dy } of directions) {
           const nx = x + dx;
           const ny = y + dy;
           
+          // Verificar se está dentro dos limites
           if (nx >= 0 && nx < size && ny >= 0 && ny < size) {
             const neighbor = grid[nx][ny];
-            if (neighbor.type) { // Se a sala vizinha existe
-              room.exits.push(dir);
+            // Só conectar se a sala vizinha existe e não é obstáculo
+            if (neighbor.type && !neighbor.isObstacle) {
+              possibleExits.push(dir);
             }
           }
         }
+        
+        // Determinar quantas saídas esta sala terá (variável aleatório)
+        const maxExits = possibleExits.length;
+        const minExits = Math.max(1, Math.floor(maxExits * 0.6)); // Pelo menos 60% das saídas possíveis
+        const numExits = this.rng.int(minExits, maxExits);
+        
+        // Selecionar saídas aleatoriamente
+        const shuffledExits = this.rng.shuffle([...possibleExits]);
+        room.exits = shuffledExits.slice(0, numExits);
       }
     }
   }
@@ -247,6 +276,12 @@ export class DungeonGenerator {
           mobId: this.selectBossForBiome(),
           level: this.floor + 3,
           isBoss: true
+        };
+      
+      case 'OBSTACLE':
+        return {
+          blockType: this.rng.choice(['rocks', 'roots', 'collapse', 'wall']),
+          description: 'Passagem completamente bloqueada'
         };
       
       default:
@@ -356,6 +391,30 @@ export class DungeonGenerator {
         'Uma presença aterrorizante domina esta câmara.',
         'O ar fica denso conforme você se aproxima.',
         'Este é claramente o covil de algo poderoso.'
+      ],
+      'OBSTACLE': [
+        'Uma parede rochosa bloqueia completamente a passagem.',
+        'Escombros de pedra impedem qualquer entrada.',
+        'Um desmoronamento tornou esta área inacessível.',
+        'Raízes gigantes ou formações rochosas bloqueiam o caminho.'
+      ],
+      'WORKSHOP': [
+        'Uma antiga forja ainda funcional domina esta sala.',
+        'Ferramentas de ferreiro estão espalhadas pela bigorna.',
+        'O calor de uma forja mágica aquece o ambiente.',
+        'Uma oficina bem equipada para trabalhar metais.'
+      ],
+      'ALCHEMY': [
+        'Frascos borbulhantes e caldeirões enchem a mesa.',
+        'O ar está carregado com aromas de poções e essências.',
+        'Um laboratório alquímico bem organizado.',
+        'Ingredientes raros estão catalogados nas prateleiras.'
+      ],
+      'ENCHANTING': [
+        'Cristais flutuantes emitem uma luz suave e mística.',
+        'Runas arcanas brilham em um círculo de encantamento.',
+        'Uma mesa de encantamento pulsa com energia mágica.',
+        'O ar vibra com poder arcano concentrado.'
       ]
     };
     

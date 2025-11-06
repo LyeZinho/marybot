@@ -1,5 +1,7 @@
 import config from "../../config.js";
-import { getOrCreateUser, getOrCreateDungeonRun, updateDungeonPosition } from "../../database/client.js";
+import { getOrCreateUser, getOrCreateDungeonRun, updateDungeonPosition, updateDungeonProgress } from "../../database/client.js";
+import { dungeonProgressTracker } from "../../game/dungeonProgressTracker.js";
+import { questTracker } from "../../game/questTracker.js";
 
 export default {
   name: "move",
@@ -66,11 +68,64 @@ export default {
       // Marcar nova sala como descoberta
       dungeon.grid[newX][newY].discovered = true;
       
+      // Carregar progresso existente
+      if (dungeonRun.visitedRooms) {
+        dungeonProgressTracker.loadProgress(dungeonRun.visitedRooms);
+      }
+      
+      // Rastrear sala visitada no sistema de progresso
+      dungeonProgressTracker.markRoomVisited(newX, newY);
+      
+      // Gerar relatório de progresso
+      const progressReport = dungeonProgressTracker.generateExplorationReport(
+        dungeonRun.seed, 
+        dungeonRun.currentFloor
+      );
+      
+      // Salvar progresso comprimido no banco
+      await updateDungeonProgress(discordId, progressReport.compressedProgress, progressReport.explorationPercentage);
+      
       // Obter informações da nova sala
       const newRoom = dungeon.grid[newX][newY];
       
-      // Criar embed de movimento
-      const moveEmbed = await this.createMoveEmbed(dungeonRun, newRoom, newX, newY, normalizedDirection);
+      // Tracking de quests - registrar sala explorada e comando usado
+      try {
+        const questActions = [
+          {
+            type: "room_explored",
+            data: {
+              type: newRoom.type,
+              biome: dungeonRun.biome,
+              hasMob: newRoom.mob !== null,
+              difficulty: newRoom.difficulty || 1
+            }
+          },
+          {
+            type: "command_used", 
+            data: {
+              command: "move"
+            }
+          }
+        ];
+
+        const completedQuests = await questTracker.trackCombinedAction(
+          message.author.id,
+          message.guild.id,
+          questActions
+        );
+
+        // Processar notificações de quest em background
+        if (completedQuests.length > 0) {
+          setImmediate(() => {
+            questTracker.processQuestNotifications(message, completedQuests);
+          });
+        }
+      } catch (error) {
+        console.error("Erro ao rastrear progresso de quest:", error);
+      }
+      
+      // Criar embed de movimento com informações de progresso
+      const moveEmbed = await this.createMoveEmbed(dungeonRun, newRoom, newX, newY, normalizedDirection, progressReport);
       
       await message.reply({ embeds: [moveEmbed] });
       
@@ -122,12 +177,12 @@ export default {
       return false;
     }
     
-    // Verificar se a sala existe (não é parede)
+    // Verificar se a sala existe (não é parede nem obstáculo)
     const room = dungeon.grid[x][y];
-    return room && room.type !== 'WALL';
+    return room && room.type !== 'WALL' && !room.isObstacle && room.type !== 'OBSTACLE';
   },
   
-  async createMoveEmbed(dungeonRun, room, x, y, direction) {
+  async createMoveEmbed(dungeonRun, room, x, y, direction, progressReport = null) {
     const directionEmojis = {
       'north': '⬆️',
       'south': '⬇️',
@@ -181,28 +236,86 @@ export default {
       },
       timestamp: new Date().toISOString(),
     };
+
+    // Adicionar informações de progresso se disponível
+    if (progressReport) {
+      embed.fields.push({
+        name: "📊 Progresso de Exploração",
+        value: [
+          `**Salas Visitadas:** ${progressReport.roomsVisited}/${progressReport.estimatedTotalRooms}`,
+          `**Exploração:** ${progressReport.explorationPercentage}%`,
+          `**Salas Especiais:** ${progressReport.specialRoomsFound}`,
+          `**Score:** ${progressReport.explorationScore} pts`
+        ].join('\n'),
+        inline: true
+      });
+
+      // Mostrar conquista se atingiu marcos importantes
+      if (progressReport.explorationPercentage >= 25 && progressReport.explorationPercentage < 26) {
+        embed.fields.push({
+          name: "🎯 Conquista Desbloqueada!",
+          value: "**Explorador Iniciante** - 25% do andar explorado!",
+          inline: false
+        });
+      } else if (progressReport.explorationPercentage >= 50 && progressReport.explorationPercentage < 51) {
+        embed.fields.push({
+          name: "🎯 Conquista Desbloqueada!",
+          value: "**Explorador Experiente** - 50% do andar explorado!",
+          inline: false
+        });
+      } else if (progressReport.explorationPercentage >= 75 && progressReport.explorationPercentage < 76) {
+        embed.fields.push({
+          name: "🎯 Conquista Desbloqueada!",
+          value: "**Explorador Veterano** - 75% do andar explorado!",
+          inline: false
+        });
+      } else if (progressReport.isFloorComplete) {
+        embed.fields.push({
+          name: "🏆 Conquista Desbloqueada!",
+          value: "**Mestre Explorador** - Andar completamente explorado!",
+          inline: false
+        });
+      }
+    }
+
+    // Atualizar footer com informações de progresso
+    embed.footer = {
+      text: progressReport 
+        ? `${progressReport.explorationPercentage}% explorado • Dados: ${progressReport.dataSize} chars • ${config.prefix}look para detalhes`
+        : `Use ${config.prefix}look para observar a sala em detalhes`,
+    };
+    
+    embed.timestamp = new Date().toISOString();
     
     return embed;
   },
   
   getAvailableExits(dungeon, x, y) {
-    const directions = [
-      { name: 'Norte', dir: 'north', dx: 0, dy: -1, emoji: '⬆️' },
-      { name: 'Sul', dir: 'south', dx: 0, dy: 1, emoji: '⬇️' },
-      { name: 'Leste', dir: 'east', dx: 1, dy: 0, emoji: '➡️' },
-      { name: 'Oeste', dir: 'west', dx: -1, dy: 0, emoji: '⬅️' }
-    ];
+    const directions = {
+      'north': { name: 'Norte', emoji: '⬆️', dx: 0, dy: -1 },
+      'south': { name: 'Sul', emoji: '⬇️', dx: 0, dy: 1 },
+      'east': { name: 'Leste', emoji: '➡️', dx: 1, dy: 0 },
+      'west': { name: 'Oeste', emoji: '⬅️', dx: -1, dy: 0 }
+    };
     
+    const currentRoom = dungeon.grid[x][y];
     const exits = [];
     
-    for (const dir of directions) {
-      const newX = x + dir.dx;
-      const newY = y + dir.dy;
-      
-      if (this.isValidPosition(newX, newY, dungeon)) {
-        const room = dungeon.grid[newX][newY];
-        const discovered = room.discovered ? '' : ' (?)';
-        exits.push(`${dir.emoji} **${dir.name}**${discovered}`);
+    // Usar as saídas definidas na sala
+    if (currentRoom && currentRoom.exits) {
+      for (const exitDir of currentRoom.exits) {
+        const dir = directions[exitDir];
+        if (dir) {
+          const newX = x + dir.dx;
+          const newY = y + dir.dy;
+          
+          // Verificar se a posição de destino é válida
+          if (this.isValidPosition(newX, newY, dungeon)) {
+            const targetRoom = dungeon.grid[newX][newY];
+            const discovered = targetRoom.discovered ? '' : ' (?)';
+            exits.push(`${dir.emoji} **${dir.name}**${discovered}`);
+          }
+        }
       }
     }
     

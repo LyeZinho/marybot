@@ -20,6 +20,10 @@ model User {
   xp        Int      @default(0)
   level     Int      @default(1)
   lastDaily DateTime?
+  dailyStreak Int    @default(0)
+  longestStreak Int  @default(0)
+  lastWork  DateTime?
+  lastBeg   DateTime?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -44,6 +48,8 @@ model User {
   playerSkills    PlayerSkill[]
   battleLogs      BattleLog[]
   raidParticipations RaidParticipation[]
+  userQuests      UserQuest[]
+  questCompletions QuestCompletion[]
 
   @@map("users")
 }
@@ -111,7 +117,100 @@ model Guild {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  // Relacionamentos
+  config GuildConfig?
+
   @@map("guilds")
+}
+
+// Modelo para configurações avançadas por servidor
+model GuildConfig {
+  id       String @id @default(cuid())
+  guildId  String @unique
+  
+  // Configurações de comandos
+  commandsEnabled  Boolean @default(true)
+  dungeonEnabled   Boolean @default(true)
+  economyEnabled   Boolean @default(true)
+  animeEnabled     Boolean @default(true)
+  
+  // Configurações visuais
+  primaryColor     String  @default("#5865f2")
+  successColor     String  @default("#00ff00")
+  errorColor       String  @default("#ff0000")
+  warningColor     String  @default("#ffff00")
+  
+  // Emojis personalizados
+  pingEmoji        String  @default("🏓")
+  helpEmoji        String  @default("📚")
+  successEmoji     String  @default("✅")
+  errorEmoji       String  @default("❌")
+  warningEmoji     String  @default("⚠️")
+  loadingEmoji     String  @default("⏳")
+  
+  // Configurações de cooldown (em milissegundos)
+  defaultCooldown  Int     @default(3000)
+  dungeonCooldown  Int     @default(2000)
+  economyCooldown  Int     @default(5000)
+  
+  // Configurações de economia
+  dailyAmount      Int     @default(100)
+  dailyCooldown    Int     @default(86400000) // 24 horas
+  
+  // Configurações de dungeon
+  maxDungeonFloor  Int     @default(50)
+  startingHp       Int     @default(100)
+  xpMultiplier     Float   @default(1.0)
+  coinMultiplier   Float   @default(1.0)
+  
+  // Canais específicos (opcional)
+  dungeonChannelId String?
+  economyChannelId String?
+  logChannelId     String?
+  
+  // Roles permitidas para comandos admin
+  adminRoles       String[] @default([])
+  moderatorRoles   String[] @default([])
+  
+  // Configurações de salas temporárias
+  roomEnabled        Boolean @default(true)
+  roomDefaultTimeout Int     @default(30)
+  roomMinTimeout     Int     @default(5)
+  roomMaxTimeout     Int     @default(480)
+  roomMaxPerUser     Int     @default(3)
+  roomRequiredRole   String?
+  roomAllowExtension Boolean @default(true)
+  roomMaxExtension   Int     @default(60)
+  roomAutoCleanup    Boolean @default(true)
+  
+  // Configurações de canais de voz extensíveis
+  voiceEnabled           Boolean  @default(false)
+  voiceParentChannel     String?
+  voiceChannelTemplate   String   @default("🎤 Canal #{number}")
+  voiceUserLimit         Int      @default(0)
+  voiceBitrate          Int      @default(64000)
+  voiceDeleteWhenEmpty  Boolean  @default(true)
+  voiceEmptyTimeout     Int      @default(30000)
+  voiceCreatorPermissions Boolean @default(true)
+  voiceAllowedRoles     String[] @default([])
+  voiceMaxChannels      Int      @default(10)
+  
+  // Configurações de mensagens de boas-vindas
+  welcomeEnabled         Boolean  @default(false)
+  welcomeChannelId       String?
+  welcomeMessage         String   @default("Bem-vindo(a)!")
+  welcomeBackgroundColor String   @default("#1a1a2e")
+  welcomeBackgroundUrl   String?
+  welcomeMentionUser     Boolean  @default(true)
+  welcomeDeleteAfter     Int      @default(0)
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relacionamentos
+  guild Guild @relation(fields: [guildId], references: [id], onDelete: Cascade)
+
+  @@map("guild_configs")
 }
 
 // Modelo para comandos personalizados por servidor
@@ -140,6 +239,7 @@ model DungeonRun {
   positionY    Int      @default(0)
   mapData      Json     // Mapa serializado
   inventory    Json     // Itens coletados
+  visitedRooms String   @default("") // Progresso comprimido de salas visitadas
   health       Int      @default(100)
   maxHealth    Int      @default(100)
   progress     Float    @default(0)
@@ -300,6 +400,7 @@ enum Rarity {
 enum TransactionType {
   DAILY
   WORK
+  BEG
   CRIME
   GAMBLE_WIN
   GAMBLE_LOSS
@@ -377,4 +478,183 @@ enum BiomeType {
   GLACIER
   RUINS
   ABYSS
+}
+
+// Sistema de Quests Diárias
+model DailyQuestBoard {
+  id          String   @id @default(cuid())
+  guildId     String
+  date        DateTime @default(now())
+  questsData  Json     // Array com as quests do dia
+  createdAt   DateTime @default(now())
+  
+  // Relacionamentos
+  userQuests  UserQuest[]
+  
+  @@unique([guildId, date])
+  @@map("daily_quest_boards")
+}
+
+model Quest {
+  id            String      @id @default(cuid())
+  questId       String      @unique // ID único para identificar tipo de quest
+  name          String
+  description   String
+  category      QuestCategory
+  type          QuestType
+  targetType    String?     // "kill", "collect", "explore", etc.
+  targetValue   Int         // Quantidade necessária
+  requirements  Json?       // Requisitos específicos
+  rewards       Json        // Recompensas (XP, moedas, itens)
+  difficulty    QuestDifficulty
+  isActive      Boolean     @default(true)
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+  
+  // Relacionamentos
+  userQuests    UserQuest[]
+  completions   QuestCompletion[]
+  
+  @@map("quests")
+}
+
+model UserQuest {
+  id              String      @id @default(cuid())
+  userId          String
+  questId         String
+  guildId         String
+  boardId         String?
+  progress        Int         @default(0)
+  isCompleted     Boolean     @default(false)
+  isRewardClaimed Boolean     @default(false)
+  startedAt       DateTime    @default(now())
+  completedAt     DateTime?
+  claimedAt       DateTime?
+  
+  // Relacionamentos
+  user            User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  quest           Quest       @relation(fields: [questId], references: [id], onDelete: Cascade)
+  board           DailyQuestBoard? @relation(fields: [boardId], references: [id], onDelete: SetNull)
+  
+  @@unique([userId, questId, guildId, boardId])
+  @@map("user_quests")
+}
+
+model QuestCompletion {
+  id          String   @id @default(cuid())
+  userId      String
+  questId     String
+  guildId     String
+  completedAt DateTime @default(now())
+  rewardXp    Int      @default(0)
+  rewardCoins Int      @default(0)
+  rewardItems Json?    // Array de itens recebidos
+  
+  // Relacionamentos
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  quest       Quest    @relation(fields: [questId], references: [id], onDelete: Cascade)
+  
+  @@map("quest_completions")
+}
+
+model QuestRanking {
+  id              String   @id @default(cuid())
+  guildId         String
+  userId          String
+  username        String
+  dailyCompleted  Int      @default(0)
+  weeklyCompleted Int      @default(0)
+  totalCompleted  Int      @default(0)
+  totalXp         Int      @default(0)
+  totalCoins      Int      @default(0)
+  lastUpdated     DateTime @default(now())
+  
+  @@unique([guildId, userId])
+  @@map("quest_rankings")
+}
+
+enum QuestCategory {
+  COMBAT      // Batalhas e combate
+  EXPLORATION // Exploração de dungeons
+  COLLECTION  // Coleta de itens
+  SOCIAL      // Atividades sociais
+  DAILY       // Atividades diárias
+  SPECIAL     // Eventos especiais
+}
+
+enum QuestType {
+  KILL_MOBS       // Matar X mobs
+  EXPLORE_ROOMS   // Explorar X salas
+  COLLECT_ITEMS   // Coletar X itens
+  EARN_COINS      // Ganhar X moedas
+  USE_COMMANDS    // Usar comandos X vezes
+  WIN_BATTLES     // Vencer X batalhas
+  REACH_FLOOR     // Chegar ao andar X
+  FIND_TREASURE   // Encontrar X tesouros
+  SURVIVE_TIME    // Sobreviver X tempo
+  COMPLETE_DAILY  // Completar daily tasks
+}
+
+enum QuestDifficulty {
+  EASY
+  MEDIUM
+  HARD
+  EXPERT
+  LEGENDARY
+}
+
+// Log de atividades da economia para monitoramento
+model EconomyLog {
+  id        String   @id @default(cuid())
+  userId    String
+  guildId   String?
+  action    String   // USER_SUSPENDED, USER_FLAGGED, LARGE_TRANSACTION, etc.
+  details   String?  // JSON com detalhes
+  severity  String   // LOW, MEDIUM, HIGH, CRITICAL
+  createdAt DateTime @default(now())
+
+  @@map("economy_logs")
+}
+
+// Sistema de memória de mensagens para aprendizado contextual
+model MessageMemory {
+  id            String   @id @default(cuid())
+  guildId       String
+  channelId     String
+  authorId      String
+  authorName    String
+  content       String   // Conteúdo normalizado
+  originalContent String // Conteúdo original
+  embedding     String?  // JSON array de embeddings
+  relevance     Float    @default(1.0) // Score de relevância
+  reactions     Int      @default(0) // Número de reações
+  mentions      Int      @default(0) // Número de menções
+  wordCount     Int      @default(0)
+  sentiment     String?  // POSITIVE, NEUTRAL, NEGATIVE
+  topics        String?  // JSON array de tópicos detectados
+  createdAt     DateTime @default(now())
+  
+  @@index([guildId, createdAt])
+  @@index([authorId])
+  @@index([relevance])
+  @@map("message_memory")
+}
+
+// Contexto aprendido por servidor
+model GuildContext {
+  id              String   @id @default(cuid())
+  guildId         String   @unique
+  personality     String   @default("friendly") // friendly, funny, serious, helpful
+  learningEnabled Boolean  @default(true)
+  responseRate    Float    @default(0.1) // 10% chance de responder
+  minWordCount    Int      @default(3)
+  maxMemorySize   Int      @default(10000)
+  blacklistedWords String? // JSON array
+  whitelistedChannels String? // JSON array
+  topics          String?  // JSON com tópicos mais discutidos
+  lastCleanup     DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  @@map("guild_context")
 }

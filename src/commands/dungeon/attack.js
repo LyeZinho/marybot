@@ -3,6 +3,7 @@ import { getOrCreateDungeonRun } from "../../database/client.js";
 import { combatEngine } from "../../game/combatEngine.js";
 import { mobManager } from "../../game/mobManager.js";
 import { combatRenderer } from "../../utils/combatRenderer.js";
+import { questTracker } from "../../game/questTracker.js";
 import { AttachmentBuilder } from "discord.js";
 import config from "../../config.js";
 
@@ -32,7 +33,7 @@ export default {
       }
 
       // Verificar se é o turno do jogador
-      const currentTurn = battle.turnOrder[battle.turn % battle.turnOrder.length];
+      const currentTurn = battle.turnOrder[0];
       if (currentTurn.type !== 'player') {
         return message.reply({
           embeds: [{
@@ -362,6 +363,67 @@ export default {
     }
     
     turnLog.push(rewardText);
+    
+    // Tracking de quests - registrar mob morto e batalha vencida
+    try {
+      const questActions = [
+        {
+          type: "mob_killed",
+          data: {
+            type: mob.type,
+            name: mob.name,
+            level: mob.level
+          }
+        },
+        {
+          type: "battle_won", 
+          data: {
+            enemyType: mob.type,
+            enemyLevel: mob.level,
+            difficulty: mob.difficulty || "normal"
+          }
+        }
+      ];
+
+      // Se ganhou moedas, registrar também
+      if (loot.coins > 0) {
+        questActions.push({
+          type: "coins_earned",
+          data: {
+            amount: loot.coins,
+            source: "combat"
+          }
+        });
+      }
+
+      // Se ganhou itens, registrar também  
+      if (loot.items.length > 0) {
+        questActions.push({
+          type: "items_collected",
+          data: loot.items.map(item => ({
+            type: item.type || "unknown",
+            name: item.item,
+            quantity: item.quantity,
+            rarity: item.rarity || "common"
+          }))
+        });
+      }
+
+      const completedQuests = await questTracker.trackCombinedAction(
+        message.author.id, 
+        message.guild.id, 
+        questActions
+      );
+
+      // Processar notificações de quest em background
+      if (completedQuests.length > 0) {
+        setImmediate(() => {
+          questTracker.processQuestNotifications(message, completedQuests);
+        });
+      }
+    } catch (error) {
+      console.error("Erro ao rastrear progresso de quest:", error);
+    }
     
     // Limpar batalha
     combatEngine.activeBattles.delete(message.author.id);

@@ -1,3 +1,4 @@
+import { configManager } from "../../utils/configManager.js";
 import config from "../../config.js";
 
 export default {
@@ -8,7 +9,7 @@ export default {
   usage: "help [comando] [página]",
   cooldown: 3000,
   
-  async execute(client, message, args) {
+  async execute(client, message, args, config) {
     try {
       // Se um comando específico foi solicitado
       if (args.length > 0 && isNaN(args[0])) {
@@ -119,6 +120,16 @@ export default {
           
           collector.on('collect', async (reaction, user) => {
             try {
+              // Se a reação for parcial (por partials habilitados), buscar a reação completa
+              if (reaction.partial) {
+                try {
+                  await reaction.fetch();
+                } catch (fetchErr) {
+                  console.error('Erro ao buscar reaction parcial:', fetchErr);
+                  return;
+                }
+              }
+
               if (reaction.emoji.name === '⬅️' && currentPage > 1) {
                 currentPage--;
                 const newEmbed = this.createPaginatedHelpEmbed(categories, currentPage, totalPages, categoriesPerPage);

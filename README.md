@@ -5,9 +5,12 @@ Um bot Discord avançado com sistema prefix-based, focado em comandos de anime e
 ## ✨ Características
 
 - 🎯 **Sistema prefix-based** (`m.` por padrão)
-- 🎌 **Comandos de anime** (waifus, citações, etc.)
+- 🎌 **Comandos de anime** (waifus, citações, calendário interativo)
+- 📅 **Calendário de Anime** - Cada dia do mês tem um personagem especial
+- 🎉 **Mensagens de Boas-Vindas** - Imagens personalizadas para novos membros
 - 💰 **Sistema de economia** completo com banco de dados
 - 🏰 **Sistema de Dungeon** com mapas visuais procedurais
+- 🧠 **Sistema de Aprendizado** com IA e memória conversacional
 - 🗺️ **Mapas em PNG** gerados dinamicamente com SVG
 - 🗄️ **PostgreSQL** com Prisma ORM
 - 🐳 **Docker** para fácil deploy

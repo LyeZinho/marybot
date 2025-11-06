@@ -77,7 +77,9 @@ export async function disconnectDatabase() {
 // Função para obter a instância do Prisma
 export function getPrisma() {
   if (!prisma) {
-    throw new Error('Database not initialized. Call initDatabase() first.');
+    // Retornar null ao invés de lançar erro
+    // Permite código mais resiliente
+    return null;
   }
   return prisma;
 }
@@ -246,6 +248,29 @@ export async function updateDungeonHealth(discordId, health) {
       isActive: true 
     },
     data: { health }
+  });
+}
+
+// Atualizar progresso de salas visitadas (comprimido)
+export async function updateDungeonProgress(discordId, compressedVisitedRooms, explorationPercentage = null) {
+  const client = getPrisma();
+  
+  const user = await getOrCreateUser(discordId, 'Unknown');
+  
+  const updateData = {
+    visitedRooms: compressedVisitedRooms
+  };
+  
+  if (explorationPercentage !== null) {
+    updateData.progress = explorationPercentage;
+  }
+  
+  return await client.dungeonRun.updateMany({
+    where: { 
+      userId: user.id,
+      isActive: true 
+    },
+    data: updateData
   });
 }
 

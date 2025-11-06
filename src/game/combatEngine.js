@@ -89,6 +89,25 @@ export class CombatEngine {
     // Avançar para próximo turno
     this.advanceTurn(battle);
 
+    // Se agora é o turno do mob, executar automaticamente
+    if (battle.turnOrder[0].type === 'mob') {
+      const mobResult = await this.executeMobAction(battle);
+      result.logs = result.logs.concat(mobResult.logs);
+      
+      // Processar status effects novamente
+      this.processStatusEffects(battle);
+      
+      // Verificar novamente se batalha terminou
+      const mobBattleResult = this.checkBattleEnd(battle);
+      if (mobBattleResult) {
+        this.activeBattles.delete(userId);
+        return { ...result, battleEnded: true, result: mobBattleResult };
+      }
+      
+      // Avançar turno após ação do mob
+      this.advanceTurn(battle);
+    }
+
     return { ...result, battleEnded: false };
   }
 
@@ -102,6 +121,9 @@ export class CombatEngine {
       
       case 'skill':
         return this.executeSkill(player, mob, logs, action.skillId);
+      
+      case 'defend':
+        return this.executeDefend(player, logs);
       
       case 'item':
         return this.useItem(player, logs, action.itemId);
@@ -119,11 +141,28 @@ export class CombatEngine {
     const { mob, player } = battle;
     const logs = [];
 
-    // IA simples do mob
-    const availableSkills = mob.skills || ['basic_attack'];
-    const skill = this.selectMobSkill(mob, player, availableSkills);
+    try {
+      // IA simples do mob
+      const availableSkills = mob.skills || ['basic_attack'];
+      const skill = this.selectMobSkill(mob, player, availableSkills);
 
-    return this.executeAttack(mob, player, logs, skill);
+      // Executar ação do mob e registrar logs
+      const result = this.executeAttack(mob, player, logs, skill);
+      
+      // Garantir que sempre há uma ação executada
+      if (!result || !result.success) {
+        // Fallback para ataque básico se nenhuma ação foi bem-sucedida
+        logs.push(`🤖 ${mob.name} hesita e executa um ataque básico!`);
+        return this.executeAttack(mob, player, logs, 'basic_attack');
+      }
+      
+      return result;
+    } catch (error) {
+      console.error('Erro na execução do mob:', error);
+      // Fallback de emergência
+      logs.push(`🤖 ${mob.name} está confuso e ataca!`);
+      return this.executeAttack(mob, player, logs, 'basic_attack');
+    }
   }
 
   executeAttack(attacker, defender, logs, skillId = 'basic_attack') {
@@ -191,6 +230,23 @@ export class CombatEngine {
     logs.push(`❤️ ${target.name}: ${target.currentHp}/${target.maxHp} HP`);
 
     return { success: true, logs, heal: actualHeal };
+  }
+
+  executeDefend(player, logs) {
+    // Aplicar buff de defesa temporário
+    if (!player.buffs.defending) {
+      player.buffs.defending = {
+        name: 'Defendendo',
+        defenseBonus: Math.floor(player.def * 0.5),
+        duration: 1 // Dura apenas este turno
+      };
+      
+      logs.push(`🛡️ **${player.name}** assume uma postura defensiva! (+${player.buffs.defending.defenseBonus} DEF)`);
+    } else {
+      logs.push(`🛡️ **${player.name}** continua se defendendo!`);
+    }
+    
+    return { success: true, logs };
   }
 
   calculateDamage(attacker, defender, skill) {

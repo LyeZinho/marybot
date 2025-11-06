@@ -46,7 +46,7 @@ export default {
       const { player, mob, turn, logs } = battle;
       
       // Determinar de quem é o turno
-      const currentTurn = battle.turnOrder[turn % battle.turnOrder.length];
+      const currentTurn = battle.turnOrder[0];
       const isPlayerTurn = currentTurn.type === 'player';
       
       // Calcular porcentagens de HP
