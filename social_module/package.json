@@ -1,0 +1,14 @@
+{
+  "name": "marybot-social-module",
+  "version": "1.0.0",
+  "description": "Módulo social do MaryBot para coleta e análise de mensagens",
+  "main": "index.js",
+  "type": "module",
+  "dependencies": {
+    "better-sqlite3": "^9.2.2",
+    "sqlite3": "^5.1.6"
+  },
+  "scripts": {
+    "init-db": "node database/initSocialDB.js"
+  }
+}

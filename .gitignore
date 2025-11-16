@@ -118,6 +118,9 @@ postgres_data/
 *.db
 *.sqlite
 
+ai_server/gpt2/
+ai_server/nsfw_image_detection/
+
 # Prisma migrations (optional - remove if you want to track them)
 # prisma/migrations/
 

@@ -104,6 +104,21 @@ export class ConfigManager {
         backgroundUrl: null, // URL de imagem de fundo (opcional)
         mentionUser: true, // Mencionar o usuário na mensagem
         deleteAfter: 0 // Deletar após X segundos (0 = nunca)
+      },
+
+      // Configurações de detecção automática NSFW
+      nsfw: {
+        enabled: false, // Ativar detecção automática de NSFW
+        strictMode: false, // Modo mais restritivo (detecção mais sensível)
+        deleteMessage: true, // Deletar mensagens com conteúdo NSFW detectado
+        sendWarning: true, // Enviar aviso ao usuário
+        autoDeleteWarning: true, // Auto-deletar aviso após 30 segundos
+        punishment: 'none', // Punição: 'none', 'timeout', 'kick', 'ban'
+        notifyMods: false, // Notificar moderação
+        modChannelId: null, // Canal para notificações de moderação
+        sensitivity: 0.7, // Sensibilidade (0.0-1.0, mais alto = mais restritivo)
+        whitelistedChannels: [], // Canais onde NSFW é permitido
+        whitelistedRoles: [] // Roles isentas da detecção
       }
     };
   }
@@ -261,7 +276,20 @@ export class ConfigManager {
           voiceEmptyTimeout: 30000,
           voiceCreatorPermissions: true,
           voiceAllowedRoles: [],
-          voiceMaxChannels: 10
+          voiceMaxChannels: 10,
+          
+          // Configurações NSFW
+          nsfwEnabled: false,
+          nsfwStrictMode: false,
+          nsfwDeleteMessage: true,
+          nsfwSendWarning: true,
+          nsfwAutoDeleteWarning: true,
+          nsfwPunishment: "none",
+          nsfwNotifyMods: false,
+          nsfwModChannelId: null,
+          nsfwSensitivity: 0.7,
+          nsfwWhitelistedChannels: [],
+          nsfwWhitelistedRoles: []
         }
       });
 
@@ -381,6 +409,21 @@ export class ConfigManager {
         backgroundUrl: config.welcomeBackgroundUrl,
         mentionUser: config.welcomeMentionUser,
         deleteAfter: config.welcomeDeleteAfter
+      },
+
+      // Detecção automática NSFW
+      nsfw: {
+        enabled: config.nsfwEnabled,
+        strictMode: config.nsfwStrictMode,
+        deleteMessage: config.nsfwDeleteMessage,
+        sendWarning: config.nsfwSendWarning,
+        autoDeleteWarning: config.nsfwAutoDeleteWarning,
+        punishment: config.nsfwPunishment,
+        notifyMods: config.nsfwNotifyMods,
+        modChannelId: config.nsfwModChannelId,
+        sensitivity: config.nsfwSensitivity,
+        whitelistedChannels: config.nsfwWhitelistedChannels,
+        whitelistedRoles: config.nsfwWhitelistedRoles
       }
     };
   }
@@ -447,7 +490,31 @@ export class ConfigManager {
       'welcomeSettings.backgroundColor': { field: 'welcomeBackgroundColor', value },
       'welcomeSettings.backgroundUrl': { field: 'welcomeBackgroundUrl', value },
       'welcomeSettings.mentionUser': { field: 'welcomeMentionUser', value },
-      'welcomeSettings.deleteAfter': { field: 'welcomeDeleteAfter', value }
+      'welcomeSettings.deleteAfter': { field: 'welcomeDeleteAfter', value },
+      
+      // Configurações NSFW
+      'nsfwEnabled': { field: 'nsfwEnabled', value },
+      'nsfwStrictMode': { field: 'nsfwStrictMode', value },
+      'nsfwDeleteMessage': { field: 'nsfwDeleteMessage', value },
+      'nsfwSendWarning': { field: 'nsfwSendWarning', value },
+      'nsfwAutoDeleteWarning': { field: 'nsfwAutoDeleteWarning', value },
+      'nsfwPunishment': { field: 'nsfwPunishment', value },
+      'nsfwNotifyMods': { field: 'nsfwNotifyMods', value },
+      'nsfwModChannelId': { field: 'nsfwModChannelId', value },
+      'nsfwSensitivity': { field: 'nsfwSensitivity', value },
+      'nsfwWhitelistedChannels': { field: 'nsfwWhitelistedChannels', value },
+      'nsfwWhitelistedRoles': { field: 'nsfwWhitelistedRoles', value },
+      'nsfw.enabled': { field: 'nsfwEnabled', value },
+      'nsfw.strictMode': { field: 'nsfwStrictMode', value },
+      'nsfw.deleteMessage': { field: 'nsfwDeleteMessage', value },
+      'nsfw.sendWarning': { field: 'nsfwSendWarning', value },
+      'nsfw.autoDeleteWarning': { field: 'nsfwAutoDeleteWarning', value },
+      'nsfw.punishment': { field: 'nsfwPunishment', value },
+      'nsfw.notifyMods': { field: 'nsfwNotifyMods', value },
+      'nsfw.modChannelId': { field: 'nsfwModChannelId', value },
+      'nsfw.sensitivity': { field: 'nsfwSensitivity', value },
+      'nsfw.whitelistedChannels': { field: 'nsfwWhitelistedChannels', value },
+      'nsfw.whitelistedRoles': { field: 'nsfwWhitelistedRoles', value }
     };
 
     const mapping = mappings[key];

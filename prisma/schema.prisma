@@ -204,6 +204,19 @@ model GuildConfig {
   welcomeMentionUser     Boolean  @default(true)
   welcomeDeleteAfter     Int      @default(0)
   
+  // Configurações de detecção NSFW
+  nsfwEnabled            Boolean  @default(false)
+  nsfwStrictMode         Boolean  @default(false)
+  nsfwDeleteMessage      Boolean  @default(true)
+  nsfwSendWarning        Boolean  @default(true)
+  nsfwAutoDeleteWarning  Boolean  @default(true)
+  nsfwPunishment         String   @default("none") // none, timeout, kick, ban
+  nsfwNotifyMods         Boolean  @default(false)
+  nsfwModChannelId       String?
+  nsfwSensitivity        Float    @default(0.7) // 0.0 - 1.0, mais alto = mais restritivo
+  nsfwWhitelistedChannels String[] @default([]) // Canais onde NSFW é permitido
+  nsfwWhitelistedRoles   String[] @default([]) // Roles isentas da detecção
+  
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 

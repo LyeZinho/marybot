@@ -9,6 +9,9 @@ dotenv.config();
 import config from "./config.js";
 import { logger } from "./utils/logger.js";
 import initDatabase, { disconnectDatabase } from "./database/client.js";
+import { spawn } from "child_process";
+import { fileURLToPath } from "url";
+import fetch from "node-fetch";
 
 const client = new Client({
   intents: [
@@ -23,6 +26,64 @@ const client = new Client({
 });
 
 client.commands = new Collection();
+
+// --- Função para inicializar servidor AI ---
+let aiServerProcess = null;
+
+async function startAIServer() {
+  try {
+    const __filename = fileURLToPath(import.meta.url);
+    const __dirname = path.dirname(__filename);
+    const aiServerPath = path.join(__dirname, "..", "ai_server", "server.js");
+    
+    logger.info("🤖 Iniciando servidor de AI...");
+    logger.info(`📁 Caminho: ${aiServerPath}`);
+    
+    aiServerProcess = spawn('node', [aiServerPath], {
+      stdio: ['inherit', 'pipe', 'pipe'],
+      cwd: path.join(__dirname, '..', 'ai_server')
+    });
+
+    aiServerProcess.stdout.on('data', (data) => {
+      logger.info(`[AI_SERVER] ${data.toString().trim()}`);
+    });
+
+    aiServerProcess.stderr.on('data', (data) => {
+      logger.error(`[AI_SERVER_ERROR] ${data.toString().trim()}`);
+    });
+
+    aiServerProcess.on('error', (error) => {
+      logger.error("Erro ao iniciar servidor AI:", error.message);
+    });
+
+    aiServerProcess.on('exit', (code, signal) => {
+      if (code !== 0) {
+        logger.warn(`Servidor AI encerrado com código ${code || signal}`);
+      }
+      aiServerProcess = null;
+    });
+
+    // Aguardar alguns segundos para o servidor inicializar
+    await new Promise(resolve => setTimeout(resolve, 5000));
+    
+    // Testar se o servidor está respondendo
+    try {
+      const response = await fetch('http://localhost:3001/health');
+      if (response.ok) {
+        const healthData = await response.json();
+        logger.success("✅ Servidor AI inicializado com sucesso!");
+        logger.info(`📊 Status: ${healthData.status}`);
+      } else {
+        logger.warn("⚠️ Servidor AI iniciado mas não está respondendo corretamente");
+      }
+    } catch (testError) {
+      logger.warn("⚠️ Não foi possível verificar o status do servidor AI:", testError.message);
+    }
+
+  } catch (error) {
+    logger.error("Falha ao iniciar servidor AI:", error.message || error);
+  }
+}
 
 // --- Função para carregar comandos dinamicamente ---
 async function loadCommands() {
@@ -153,6 +214,18 @@ async function init() {
     } catch (error) {
       logger.warn("⚠️ Erro ao inicializar sistema de voz:", error.message);
     }
+
+    // Inicializar sistema de gaming
+    try {
+      const { gamingManager } = await import("./gaming/GamingManager.js");
+      await gamingManager.initialize();
+      logger.success("✅ Sistema de gaming inicializado com sucesso!");
+    } catch (error) {
+      logger.warn("⚠️ Erro ao inicializar sistema de gaming:", error.message);
+    }
+    
+    // Inicializar servidor AI
+    await startAIServer();
     
     // Carregar comandos e eventos
     await loadCommands();
@@ -181,12 +254,26 @@ process.on("uncaughtException", (error) => {
 // Graceful shutdown
 process.on("SIGINT", async () => {
   logger.info("🛑 Recebido SIGINT, encerrando bot...");
+  
+  // Encerrar servidor AI
+  if (aiServerProcess) {
+    logger.info("🤖 Encerrando servidor AI...");
+    aiServerProcess.kill('SIGTERM');
+  }
+  
   await disconnectDatabase();
   process.exit(0);
 });
 
 process.on("SIGTERM", async () => {
   logger.info("🛑 Recebido SIGTERM, encerrando bot...");
+  
+  // Encerrar servidor AI
+  if (aiServerProcess) {
+    logger.info("🤖 Encerrando servidor AI...");
+    aiServerProcess.kill('SIGTERM');
+  }
+  
   await disconnectDatabase();
   process.exit(0);
 });
