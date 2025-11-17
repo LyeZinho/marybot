@@ -7,6 +7,7 @@ import { SlashCommandBuilder, EmbedBuilder } from 'discord.js';
 import { aiStatsManager } from '../../utils/aiStatsManager.js';
 
 export default {
+  name: 'ai-stats',
   data: new SlashCommandBuilder()
     .setName('ai-stats')
     .setDescription('📊 Ver estatísticas de uso da IA')

@@ -1,0 +1,927 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Conecta 4 - Bot vs Player</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            background-color: #1e3c72;
+            color: white;
+            margin: 0;
+            padding: 20px;
+        }
+
+        .game-container {
+            text-align: center;
+            max-width: 600px;
+            width: 100%;
+        }
+
+        .game-info {
+            display: flex;
+            justify-content: space-between;
+            margin: 20px 0;
+            gap: 20px;
+        }
+
+        .info-box {
+            background-color: #2a5298;
+            padding: 15px;
+            border-radius: 10px;
+            flex: 1;
+        }
+
+        .game-board {
+            margin: 20px auto;
+            background-color: #1565c0;
+            border-radius: 15px;
+            padding: 15px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+        }
+
+        .board {
+            display: grid;
+            grid-template-columns: repeat(7, 60px);
+            grid-template-rows: repeat(6, 60px);
+            gap: 8px;
+            background-color: #1976d2;
+            padding: 10px;
+            border-radius: 10px;
+        }
+
+        .cell {
+            width: 60px;
+            height: 60px;
+            background-color: #e8eaf6;
+            border-radius: 50%;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 2.5em;
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .cell:hover {
+            background-color: #c5cae9;
+            transform: scale(1.05);
+        }
+
+        .cell.red {
+            background-color: #f44336;
+            color: white;
+        }
+
+        .cell.yellow {
+            background-color: #ffeb3b;
+            color: #333;
+        }
+
+        .cell.winning {
+            animation: pulse 1s infinite;
+            box-shadow: 0 0 20px rgba(255, 215, 0, 0.8);
+        }
+
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.1); }
+            100% { transform: scale(1); }
+        }
+
+        .column-buttons {
+            display: grid;
+            grid-template-columns: repeat(7, 60px);
+            gap: 8px;
+            margin-bottom: 10px;
+            justify-content: center;
+        }
+
+        .column-btn {
+            padding: 10px;
+            font-size: 1.2em;
+            background-color: #4caf50;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+
+        .column-btn:hover {
+            background-color: #45a049;
+        }
+
+        .column-btn:disabled {
+            background-color: #666;
+            cursor: not-allowed;
+        }
+
+        .controls {
+            margin: 20px 0;
+        }
+
+        button {
+            padding: 10px 20px;
+            font-size: 1em;
+            background-color: #ff9800;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            margin: 5px;
+        }
+
+        button:hover {
+            background-color: #f57c00;
+        }
+
+        button:disabled {
+            background-color: #666;
+            cursor: not-allowed;
+        }
+
+        .status {
+            font-size: 1.2em;
+            margin: 10px 0;
+            padding: 15px;
+            background-color: #2a5298;
+            border-radius: 10px;
+        }
+
+        .bot-thinking {
+            color: #ffc107;
+            font-weight: bold;
+            animation: thinking 2s infinite;
+        }
+
+        @keyframes thinking {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        .game-mode {
+            margin: 20px 0;
+        }
+
+        .game-mode select {
+            padding: 5px 10px;
+            font-size: 1em;
+            border-radius: 5px;
+            border: none;
+            background-color: #2a5298;
+            color: white;
+        }
+
+        .move-history {
+            background-color: #2a5298;
+            padding: 15px;
+            border-radius: 10px;
+            margin: 20px 0;
+            max-height: 150px;
+            overflow-y: auto;
+        }
+
+        .falling-piece {
+            animation: fall 0.5s ease-in;
+        }
+
+        @keyframes fall {
+            0% { transform: translateY(-300px); }
+            100% { transform: translateY(0); }
+        }
+
+        .difficulty-indicator {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin: 10px 0;
+        }
+
+        .difficulty-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background-color: #666;
+        }
+
+        .difficulty-dot.active {
+            background-color: #4caf50;
+        }
+    </style>
+</head>
+<body>
+    <div class="game-container">
+        <h1>🔴 Conecta 4</h1>
+        <h2>Bot vs Player</h2>
+
+        <div class="game-mode">
+            <label for="difficulty">Dificuldade do Bot:</label>
+            <select id="difficulty">
+                <option value="easy">Fácil</option>
+                <option value="medium" selected>Médio</option>
+                <option value="hard">Difícil</option>
+            </select>
+            <div class="difficulty-indicator">
+                <span>Nível:</span>
+                <div class="difficulty-dot active" id="dot1"></div>
+                <div class="difficulty-dot" id="dot2"></div>
+                <div class="difficulty-dot" id="dot3"></div>
+            </div>
+        </div>
+
+        <div class="game-info">
+            <div class="info-box">
+                <div><strong>👤 Player</strong></div>
+                <div style="font-size: 2em; margin: 10px 0;">🔴</div>
+                <div>Vitórias: <span id="playerWins">0</span></div>
+            </div>
+            <div class="info-box">
+                <div><strong>📊 Jogo Atual</strong></div>
+                <div>Jogadas: <span id="moveCount">0</span></div>
+                <div>Turno: <span id="currentTurn">Player</span></div>
+            </div>
+            <div class="info-box">
+                <div><strong>🤖 Bot</strong></div>
+                <div style="font-size: 2em; margin: 10px 0;">🟡</div>
+                <div>Vitórias: <span id="botWins">0</span></div>
+            </div>
+        </div>
+
+        <div class="status" id="gameStatus">
+            Clique em "Novo Jogo" para começar!
+        </div>
+
+        <div class="game-board">
+            <div class="column-buttons" id="columnButtons">
+                <button class="column-btn" onclick="dropPiece(0)" disabled>⬇️</button>
+                <button class="column-btn" onclick="dropPiece(1)" disabled>⬇️</button>
+                <button class="column-btn" onclick="dropPiece(2)" disabled>⬇️</button>
+                <button class="column-btn" onclick="dropPiece(3)" disabled>⬇️</button>
+                <button class="column-btn" onclick="dropPiece(4)" disabled>⬇️</button>
+                <button class="column-btn" onclick="dropPiece(5)" disabled>⬇️</button>
+                <button class="column-btn" onclick="dropPiece(6)" disabled>⬇️</button>
+            </div>
+            <div class="board" id="gameBoard"></div>
+        </div>
+
+        <div class="controls">
+            <button onclick="newGame()">🎯 Novo Jogo</button>
+            <button onclick="undoMove()" id="undoBtn" disabled>↩️ Desfazer</button>
+            <button onclick="getHint()" id="hintBtn" disabled>💡 Dica</button>
+            <button onclick="resetStats()">🔄 Reset Estatísticas</button>
+        </div>
+
+        <div class="move-history">
+            <strong>📝 Histórico de Jogadas:</strong>
+            <div id="moveHistory">Nenhuma jogada ainda</div>
+        </div>
+
+        <div style="margin-top: 30px;">
+            <h3>🎮 Como Jogar</h3>
+            <p><strong>Objetivo:</strong> Seja o primeiro a conectar 4 peças na horizontal, vertical ou diagonal</p>
+            <p><strong>Player:</strong> Clique nos botões das colunas para soltar sua peça vermelha</p>
+            <p><strong>Bot:</strong> O bot jogará automaticamente com suas peças amarelas</p>
+        </div>
+    </div>
+
+    <script>
+        const ROWS = 6;
+        const COLS = 7;
+        const PLAYER_PIECE = 1; // Vermelho
+        const BOT_PIECE = 2;    // Amarelo
+        const EMPTY = 0;
+
+        let board = [];
+        let currentPlayer = PLAYER_PIECE;
+        let gameActive = false;
+        let botThinking = false;
+        let difficulty = 'medium';
+        let moveHistory = [];
+        let gameStats = {
+            playerWins: 0,
+            botWins: 0,
+            draws: 0
+        };
+
+        // Elementos DOM
+        const boardElement = document.getElementById('gameBoard');
+        const statusElement = document.getElementById('gameStatus');
+        const moveHistoryElement = document.getElementById('moveHistory');
+        const columnButtons = document.querySelectorAll('.column-btn');
+        const difficultySelect = document.getElementById('difficulty');
+
+        // Inicializar
+        loadStats();
+        initializeBoard();
+        createBoard();
+        updateDisplay();
+
+        // Event listeners
+        difficultySelect.addEventListener('change', (e) => {
+            difficulty = e.target.value;
+            updateDifficultyIndicator();
+        });
+
+        // Inicializar tabuleiro
+        function initializeBoard() {
+            board = [];
+            for (let row = 0; row < ROWS; row++) {
+                board[row] = [];
+                for (let col = 0; col < COLS; col++) {
+                    board[row][col] = EMPTY;
+                }
+            }
+        }
+
+        // Criar tabuleiro visual
+        function createBoard() {
+            boardElement.innerHTML = '';
+            
+            for (let row = 0; row < ROWS; row++) {
+                for (let col = 0; col < COLS; col++) {
+                    const cell = document.createElement('div');
+                    cell.className = 'cell';
+                    cell.dataset.row = row;
+                    cell.dataset.col = col;
+                    boardElement.appendChild(cell);
+                }
+            }
+            
+            updateBoardDisplay();
+        }
+
+        // Atualizar display do tabuleiro
+        function updateBoardDisplay() {
+            const cells = boardElement.querySelectorAll('.cell');
+            
+            cells.forEach((cell, index) => {
+                const row = Math.floor(index / COLS);
+                const col = index % COLS;
+                const piece = board[row][col];
+                
+                cell.classList.remove('red', 'yellow', 'winning', 'falling-piece');
+                
+                if (piece === PLAYER_PIECE) {
+                    cell.classList.add('red');
+                    cell.textContent = '🔴';
+                } else if (piece === BOT_PIECE) {
+                    cell.classList.add('yellow');
+                    cell.textContent = '🟡';
+                } else {
+                    cell.textContent = '';
+                }
+            });
+        }
+
+        // Soltar peça
+        function dropPiece(col) {
+            if (!gameActive || botThinking || currentPlayer !== PLAYER_PIECE) return;
+            
+            const row = getLowestEmptyRow(col);
+            if (row === -1) return; // Coluna cheia
+            
+            makeMove(row, col, PLAYER_PIECE);
+        }
+
+        // Encontrar linha mais baixa vazia
+        function getLowestEmptyRow(col) {
+            for (let row = ROWS - 1; row >= 0; row--) {
+                if (board[row][col] === EMPTY) {
+                    return row;
+                }
+            }
+            return -1; // Coluna cheia
+        }
+
+        // Fazer movimento
+        function makeMove(row, col, player) {
+            board[row][col] = player;
+            
+            // Adicionar animação de queda
+            const cellIndex = row * COLS + col;
+            const cell = boardElement.children[cellIndex];
+            cell.classList.add('falling-piece');
+            
+            // Adicionar ao histórico
+            moveHistory.push({
+                row,
+                col,
+                player,
+                move: moveHistory.length + 1
+            });
+            
+            updateBoardDisplay();
+            updateMoveHistory();
+            
+            // Verificar vitória
+            const winningCells = checkWin(row, col, player);
+            if (winningCells.length > 0) {
+                gameActive = false;
+                highlightWinningCells(winningCells);
+                
+                const winner = player === PLAYER_PIECE ? 'Player' : 'Bot';
+                statusElement.textContent = `🏆 ${winner} venceu! Conectou 4 em linha!`;
+                
+                if (player === PLAYER_PIECE) {
+                    gameStats.playerWins++;
+                } else {
+                    gameStats.botWins++;
+                }
+                
+                updateStats();
+                disableColumnButtons();
+                return;
+            }
+            
+            // Verificar empate
+            if (isBoardFull()) {
+                gameActive = false;
+                statusElement.textContent = '🤝 Empate! Tabuleiro cheio!';
+                gameStats.draws++;
+                updateStats();
+                disableColumnButtons();
+                return;
+            }
+            
+            // Trocar jogador
+            currentPlayer = currentPlayer === PLAYER_PIECE ? BOT_PIECE : PLAYER_PIECE;
+            updateDisplay();
+            
+            // Movimento do bot
+            if (gameActive && currentPlayer === BOT_PIECE) {
+                setTimeout(() => {
+                    makeBotMove();
+                }, 1000 + Math.random() * 2000); // 1-3 segundos
+            }
+        }
+
+        // Movimento do bot
+        function makeBotMove() {
+            if (!gameActive || currentPlayer !== BOT_PIECE || botThinking) return;
+            
+            botThinking = true;
+            statusElement.textContent = '🤖 Bot analisando...';
+            statusElement.classList.add('bot-thinking');
+            
+            setTimeout(() => {
+                const col = getBestMove();
+                if (col !== -1) {
+                    const row = getLowestEmptyRow(col);
+                    if (row !== -1) {
+                        makeMove(row, col, BOT_PIECE);
+                    }
+                }
+                
+                botThinking = false;
+                statusElement.classList.remove('bot-thinking');
+                
+                if (gameActive) {
+                    updateDisplay();
+                }
+            }, 1500 + Math.random() * 1500);
+        }
+
+        // Obter melhor movimento para o bot
+        function getBestMove() {
+            const depths = { easy: 2, medium: 4, hard: 6 };
+            const maxDepth = depths[difficulty];
+            
+            let bestCol = -1;
+            let bestScore = -Infinity;
+            
+            // Verificar todas as colunas disponíveis
+            for (let col = 0; col < COLS; col++) {
+                if (getLowestEmptyRow(col) !== -1) {
+                    const row = getLowestEmptyRow(col);
+                    
+                    // Fazer movimento temporário
+                    board[row][col] = BOT_PIECE;
+                    
+                    // Calcular pontuação usando minimax
+                    const score = minimax(maxDepth - 1, false, -Infinity, Infinity);
+                    
+                    // Desfazer movimento
+                    board[row][col] = EMPTY;
+                    
+                    // Adicionar aleatoriedade na dificuldade fácil
+                    const finalScore = difficulty === 'easy' ? 
+                        score + (Math.random() * 20 - 10) : score;
+                    
+                    if (finalScore > bestScore) {
+                        bestScore = finalScore;
+                        bestCol = col;
+                    }
+                }
+            }
+            
+            return bestCol;
+        }
+
+        // Algoritmo Minimax
+        function minimax(depth, isMaximizing, alpha, beta) {
+            // Verificar condições terminais
+            const botWin = checkWinForPlayer(BOT_PIECE);
+            const playerWin = checkWinForPlayer(PLAYER_PIECE);
+            
+            if (botWin) return 100 + depth;
+            if (playerWin) return -100 - depth;
+            if (depth === 0 || isBoardFull()) return evaluateBoard();
+            
+            if (isMaximizing) {
+                let maxEval = -Infinity;
+                for (let col = 0; col < COLS; col++) {
+                    const row = getLowestEmptyRow(col);
+                    if (row !== -1) {
+                        board[row][col] = BOT_PIECE;
+                        const eval = minimax(depth - 1, false, alpha, beta);
+                        board[row][col] = EMPTY;
+                        
+                        maxEval = Math.max(maxEval, eval);
+                        alpha = Math.max(alpha, eval);
+                        
+                        if (beta <= alpha) break; // Poda alfa-beta
+                    }
+                }
+                return maxEval;
+            } else {
+                let minEval = Infinity;
+                for (let col = 0; col < COLS; col++) {
+                    const row = getLowestEmptyRow(col);
+                    if (row !== -1) {
+                        board[row][col] = PLAYER_PIECE;
+                        const eval = minimax(depth - 1, true, alpha, beta);
+                        board[row][col] = EMPTY;
+                        
+                        minEval = Math.min(minEval, eval);
+                        beta = Math.min(beta, eval);
+                        
+                        if (beta <= alpha) break; // Poda alfa-beta
+                    }
+                }
+                return minEval;
+            }
+        }
+
+        // Avaliar tabuleiro
+        function evaluateBoard() {
+            let score = 0;
+            
+            // Priorizar centro
+            const centerCol = Math.floor(COLS / 2);
+            for (let row = 0; row < ROWS; row++) {
+                if (board[row][centerCol] === BOT_PIECE) {
+                    score += 3;
+                } else if (board[row][centerCol] === PLAYER_PIECE) {
+                    score -= 3;
+                }
+            }
+            
+            // Avaliar todas as janelas de 4 posições
+            score += evaluateWindows(BOT_PIECE) - evaluateWindows(PLAYER_PIECE);
+            
+            return score;
+        }
+
+        // Avaliar janelas de 4 posições
+        function evaluateWindows(player) {
+            let score = 0;
+            
+            // Horizontal
+            for (let row = 0; row < ROWS; row++) {
+                for (let col = 0; col < COLS - 3; col++) {
+                    const window = [board[row][col], board[row][col+1], board[row][col+2], board[row][col+3]];
+                    score += scoreWindow(window, player);
+                }
+            }
+            
+            // Vertical
+            for (let col = 0; col < COLS; col++) {
+                for (let row = 0; row < ROWS - 3; row++) {
+                    const window = [board[row][col], board[row+1][col], board[row+2][col], board[row+3][col]];
+                    score += scoreWindow(window, player);
+                }
+            }
+            
+            // Diagonal positiva
+            for (let row = 0; row < ROWS - 3; row++) {
+                for (let col = 0; col < COLS - 3; col++) {
+                    const window = [board[row][col], board[row+1][col+1], board[row+2][col+2], board[row+3][col+3]];
+                    score += scoreWindow(window, player);
+                }
+            }
+            
+            // Diagonal negativa
+            for (let row = 3; row < ROWS; row++) {
+                for (let col = 0; col < COLS - 3; col++) {
+                    const window = [board[row][col], board[row-1][col+1], board[row-2][col+2], board[row-3][col+3]];
+                    score += scoreWindow(window, player);
+                }
+            }
+            
+            return score;
+        }
+
+        // Pontuar janela
+        function scoreWindow(window, player) {
+            const opponent = player === BOT_PIECE ? PLAYER_PIECE : BOT_PIECE;
+            let score = 0;
+            
+            const playerCount = window.filter(cell => cell === player).length;
+            const opponentCount = window.filter(cell => cell === opponent).length;
+            const emptyCount = window.filter(cell => cell === EMPTY).length;
+            
+            if (playerCount === 4) {
+                score += 100;
+            } else if (playerCount === 3 && emptyCount === 1) {
+                score += 10;
+            } else if (playerCount === 2 && emptyCount === 2) {
+                score += 2;
+            }
+            
+            if (opponentCount === 3 && emptyCount === 1) {
+                score -= 80;
+            }
+            
+            return score;
+        }
+
+        // Verificar vitória
+        function checkWin(row, col, player) {
+            const directions = [
+                [0, 1],   // horizontal
+                [1, 0],   // vertical
+                [1, 1],   // diagonal \
+                [1, -1]   // diagonal /
+            ];
+            
+            for (const [dRow, dCol] of directions) {
+                const cells = [];
+                
+                // Verificar em ambas as direções
+                for (let i = -3; i <= 3; i++) {
+                    const newRow = row + i * dRow;
+                    const newCol = col + i * dCol;
+                    
+                    if (newRow >= 0 && newRow < ROWS && newCol >= 0 && newCol < COLS) {
+                        if (board[newRow][newCol] === player) {
+                            cells.push({ row: newRow, col: newCol });
+                        } else {
+                            if (cells.length >= 4) break;
+                            cells.length = 0;
+                        }
+                        
+                        if (cells.length >= 4) {
+                            return cells.slice(-4); // Retornar as 4 células conectadas
+                        }
+                    }
+                }
+            }
+            
+            return [];
+        }
+
+        // Verificar vitória para jogador específico
+        function checkWinForPlayer(player) {
+            for (let row = 0; row < ROWS; row++) {
+                for (let col = 0; col < COLS; col++) {
+                    if (board[row][col] === player) {
+                        if (checkWin(row, col, player).length > 0) {
+                            return true;
+                        }
+                    }
+                }
+            }
+            return false;
+        }
+
+        // Destacar células vencedoras
+        function highlightWinningCells(cells) {
+            cells.forEach(cell => {
+                const cellIndex = cell.row * COLS + cell.col;
+                boardElement.children[cellIndex].classList.add('winning');
+            });
+        }
+
+        // Verificar se tabuleiro está cheio
+        function isBoardFull() {
+            for (let col = 0; col < COLS; col++) {
+                if (getLowestEmptyRow(col) !== -1) {
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        // Desabilitar botões das colunas
+        function disableColumnButtons() {
+            columnButtons.forEach(btn => btn.disabled = true);
+        }
+
+        // Habilitar botões das colunas
+        function enableColumnButtons() {
+            columnButtons.forEach((btn, index) => {
+                btn.disabled = getLowestEmptyRow(index) === -1;
+            });
+        }
+
+        // Novo jogo
+        function newGame() {
+            initializeBoard();
+            currentPlayer = PLAYER_PIECE;
+            gameActive = true;
+            botThinking = false;
+            moveHistory = [];
+            
+            createBoard();
+            updateDisplay();
+            updateMoveHistory();
+            enableColumnButtons();
+            
+            statusElement.textContent = '🎮 Jogo iniciado! Sua vez de jogar (peças vermelhas)';
+            statusElement.classList.remove('bot-thinking');
+            
+            document.getElementById('undoBtn').disabled = false;
+            document.getElementById('hintBtn').disabled = false;
+        }
+
+        // Desfazer movimento
+        function undoMove() {
+            if (moveHistory.length < 2 || !gameActive || botThinking) return;
+            
+            // Desfazer última jogada do bot
+            const lastBotMove = moveHistory.pop();
+            board[lastBotMove.row][lastBotMove.col] = EMPTY;
+            
+            // Desfazer última jogada do player
+            const lastPlayerMove = moveHistory.pop();
+            board[lastPlayerMove.row][lastPlayerMove.col] = EMPTY;
+            
+            currentPlayer = PLAYER_PIECE;
+            updateBoardDisplay();
+            updateDisplay();
+            updateMoveHistory();
+        }
+
+        // Obter dica
+        function getHint() {
+            if (!gameActive || currentPlayer !== PLAYER_PIECE || botThinking) return;
+            
+            statusElement.textContent = '💡 Analisando melhor jogada...';
+            
+            setTimeout(() => {
+                const bestCol = getBestMove();
+                if (bestCol !== -1) {
+                    statusElement.textContent = `💡 Sugestão: Jogue na coluna ${bestCol + 1}!`;
+                    
+                    // Destacar coluna sugerida
+                    columnButtons[bestCol].style.backgroundColor = '#4caf50';
+                    setTimeout(() => {
+                        columnButtons[bestCol].style.backgroundColor = '';
+                    }, 2000);
+                } else {
+                    statusElement.textContent = '💡 Qualquer jogada é boa!';
+                }
+            }, 1000);
+        }
+
+        // Atualizar display
+        function updateDisplay() {
+            document.getElementById('currentTurn').textContent = 
+                currentPlayer === PLAYER_PIECE ? 'Player' : 'Bot';
+            document.getElementById('moveCount').textContent = Math.ceil(moveHistory.length / 2);
+            
+            if (gameActive && !botThinking) {
+                if (currentPlayer === PLAYER_PIECE) {
+                    statusElement.textContent = '🔴 Sua vez! Escolha uma coluna.';
+                } else {
+                    statusElement.textContent = '🟡 Vez do bot...';
+                }
+            }
+            
+            // Atualizar disponibilidade dos botões
+            if (gameActive && currentPlayer === PLAYER_PIECE && !botThinking) {
+                enableColumnButtons();
+            } else {
+                disableColumnButtons();
+            }
+        }
+
+        // Atualizar histórico de movimentos
+        function updateMoveHistory() {
+            if (moveHistory.length === 0) {
+                moveHistoryElement.textContent = 'Nenhuma jogada ainda';
+                return;
+            }
+            
+            const history = moveHistory.map((move, index) => {
+                const player = move.player === PLAYER_PIECE ? '🔴' : '🟡';
+                return `${Math.ceil((index + 1) / 2)}. ${player} Coluna ${move.col + 1}`;
+            }).join(' | ');
+            
+            moveHistoryElement.textContent = history;
+        }
+
+        // Atualizar indicador de dificuldade
+        function updateDifficultyIndicator() {
+            const dots = ['dot1', 'dot2', 'dot3'];
+            const levels = { easy: 1, medium: 2, hard: 3 };
+            const activeLevel = levels[difficulty];
+            
+            dots.forEach((dotId, index) => {
+                const dot = document.getElementById(dotId);
+                dot.classList.toggle('active', index < activeLevel);
+            });
+        }
+
+        // Carregar estatísticas
+        function loadStats() {
+            const saved = localStorage.getItem('connect4Stats');
+            if (saved) {
+                gameStats = JSON.parse(saved);
+                updateStats();
+            }
+        }
+
+        // Salvar estatísticas
+        function updateStats() {
+            document.getElementById('playerWins').textContent = gameStats.playerWins;
+            document.getElementById('botWins').textContent = gameStats.botWins;
+            localStorage.setItem('connect4Stats', JSON.stringify(gameStats));
+        }
+
+        // Reset estatísticas
+        function resetStats() {
+            gameStats = { playerWins: 0, botWins: 0, draws: 0 };
+            updateStats();
+        }
+
+        // Funções para automação externa
+        window.getConnect4GameState = function() {
+            return {
+                board: board.map(row => [...row]),
+                currentPlayer,
+                gameActive,
+                botThinking,
+                moveHistory: [...moveHistory],
+                difficulty,
+                availableColumns: Array.from({ length: COLS }, (_, i) => ({
+                    col: i,
+                    available: getLowestEmptyRow(i) !== -1
+                }))
+            };
+        };
+
+        window.makeConnect4Move = function(col) {
+            if (gameActive && !botThinking && currentPlayer === PLAYER_PIECE) {
+                const row = getLowestEmptyRow(col);
+                if (row !== -1) {
+                    makeMove(row, col, PLAYER_PIECE);
+                    return true;
+                }
+            }
+            return false;
+        };
+
+        window.getConnect4Analysis = function() {
+            const analysis = {
+                boardEvaluation: evaluateBoard(),
+                threatsForBot: [],
+                threatsForPlayer: [],
+                bestMoves: []
+            };
+            
+            // Analisar ameaças e oportunidades
+            for (let col = 0; col < COLS; col++) {
+                const row = getLowestEmptyRow(col);
+                if (row !== -1) {
+                    // Verificar se seria vitória para o bot
+                    board[row][col] = BOT_PIECE;
+                    if (checkWin(row, col, BOT_PIECE).length > 0) {
+                        analysis.threatsForBot.push(col);
+                    }
+                    board[row][col] = EMPTY;
+                    
+                    // Verificar se seria vitória para o player
+                    board[row][col] = PLAYER_PIECE;
+                    if (checkWin(row, col, PLAYER_PIECE).length > 0) {
+                        analysis.threatsForPlayer.push(col);
+                    }
+                    board[row][col] = EMPTY;
+                }
+            }
+            
+            return analysis;
+        };
+
+        // Inicializar
+        updateDifficultyIndicator();
+    </script>
+</body>
+</html>

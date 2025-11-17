@@ -1,0 +1,460 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Jogo da Velha - Bot vs Player</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            background-color: #2c3e50;
+            color: white;
+            margin: 0;
+            padding: 20px;
+        }
+
+        .game-container {
+            text-align: center;
+            max-width: 500px;
+            width: 100%;
+        }
+
+        .game-board {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 5px;
+            margin: 20px 0;
+            background-color: #34495e;
+            padding: 10px;
+            border-radius: 10px;
+        }
+
+        .cell {
+            width: 100px;
+            height: 100px;
+            background-color: #ecf0f1;
+            border: none;
+            font-size: 2em;
+            font-weight: bold;
+            cursor: pointer;
+            border-radius: 5px;
+            transition: background-color 0.3s;
+        }
+
+        .cell:hover:not(:disabled) {
+            background-color: #bdc3c7;
+        }
+
+        .cell:disabled {
+            cursor: not-allowed;
+            opacity: 0.7;
+        }
+
+        .cell.x {
+            color: #e74c3c;
+        }
+
+        .cell.o {
+            color: #3498db;
+        }
+
+        .game-info {
+            margin: 20px 0;
+        }
+
+        .status {
+            font-size: 1.2em;
+            margin: 10px 0;
+            padding: 10px;
+            background-color: #34495e;
+            border-radius: 5px;
+        }
+
+        .score {
+            display: flex;
+            justify-content: space-around;
+            margin: 20px 0;
+        }
+
+        .score-item {
+            padding: 10px;
+            background-color: #34495e;
+            border-radius: 5px;
+            min-width: 100px;
+        }
+
+        button {
+            padding: 10px 20px;
+            font-size: 1em;
+            background-color: #3498db;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            margin: 5px;
+        }
+
+        button:hover {
+            background-color: #2980b9;
+        }
+
+        .controls {
+            margin: 20px 0;
+        }
+
+        .waiting-bot {
+            color: #f39c12;
+            font-weight: bold;
+        }
+
+        .game-mode {
+            margin: 20px 0;
+        }
+
+        .game-mode select {
+            padding: 5px 10px;
+            font-size: 1em;
+            border-radius: 5px;
+            border: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="game-container">
+        <h1>🎮 Jogo da Velha</h1>
+        <h2>Bot vs Player</h2>
+        
+        <div class="game-mode">
+            <label for="gameMode">Modo de Jogo:</label>
+            <select id="gameMode">
+                <option value="human-first">Humano começa (X)</option>
+                <option value="bot-first">Bot começa (X)</option>
+            </select>
+        </div>
+
+        <div class="score">
+            <div class="score-item">
+                <div>🤖 Bot</div>
+                <div id="botScore">0</div>
+            </div>
+            <div class="score-item">
+                <div>👤 Player</div>
+                <div id="playerScore">0</div>
+            </div>
+            <div class="score-item">
+                <div>🤝 Empates</div>
+                <div id="drawScore">0</div>
+            </div>
+        </div>
+
+        <div class="status" id="gameStatus">
+            Clique em "Novo Jogo" para começar!
+        </div>
+
+        <div class="game-board" id="gameBoard">
+            <button class="cell" data-index="0"></button>
+            <button class="cell" data-index="1"></button>
+            <button class="cell" data-index="2"></button>
+            <button class="cell" data-index="3"></button>
+            <button class="cell" data-index="4"></button>
+            <button class="cell" data-index="5"></button>
+            <button class="cell" data-index="6"></button>
+            <button class="cell" data-index="7"></button>
+            <button class="cell" data-index="8"></button>
+        </div>
+
+        <div class="controls">
+            <button onclick="newGame()">🎯 Novo Jogo</button>
+            <button onclick="resetScore()">🔄 Reset Pontuação</button>
+            <button onclick="toggleGameMode()">⚙️ Trocar Modo</button>
+        </div>
+
+        <div class="game-info">
+            <p><strong>Como o Bot Joga:</strong></p>
+            <p>O bot analisa o tabuleiro e toma decisões baseadas em estratégia!</p>
+            <p>Ele aprende com cada jogada para melhorar sua performance.</p>
+        </div>
+    </div>
+
+    <script>
+        let board = ['', '', '', '', '', '', '', '', ''];
+        let currentPlayer = 'X';
+        let gameActive = false;
+        let gameMode = 'human-first';
+        let isWaitingForBot = false;
+        
+        let scores = {
+            bot: 0,
+            player: 0,
+            draw: 0
+        };
+
+        const winningConditions = [
+            [0, 1, 2], [3, 4, 5], [6, 7, 8], // linhas
+            [0, 3, 6], [1, 4, 7], [2, 5, 8], // colunas
+            [0, 4, 8], [2, 4, 6] // diagonais
+        ];
+
+        const cells = document.querySelectorAll('.cell');
+        const statusDisplay = document.getElementById('gameStatus');
+        const gameModeSelect = document.getElementById('gameMode');
+
+        // Inicializar event listeners
+        cells.forEach((cell, index) => {
+            cell.addEventListener('click', () => handleCellClick(index));
+        });
+
+        gameModeSelect.addEventListener('change', (e) => {
+            gameMode = e.target.value;
+        });
+
+        function handleCellClick(index) {
+            if (board[index] !== '' || !gameActive || isWaitingForBot) {
+                return;
+            }
+
+            makeMove(index, currentPlayer);
+            
+            if (gameActive && currentPlayer === getBotSymbol()) {
+                // Aguardar um pouco antes do bot jogar
+                isWaitingForBot = true;
+                statusDisplay.textContent = '🤖 Bot está pensando...';
+                statusDisplay.classList.add('waiting-bot');
+                
+                setTimeout(() => {
+                    if (gameActive) {
+                        makeBotMove();
+                    }
+                }, 1000 + Math.random() * 2000); // 1-3 segundos
+            }
+        }
+
+        function makeMove(index, player) {
+            board[index] = player;
+            cells[index].textContent = player;
+            cells[index].classList.add(player.toLowerCase());
+            cells[index].disabled = true;
+
+            if (checkWinner()) {
+                gameActive = false;
+                const winner = getWinner();
+                updateScore(winner);
+                statusDisplay.textContent = getWinnerMessage(winner);
+                statusDisplay.classList.remove('waiting-bot');
+                isWaitingForBot = false;
+            } else if (board.every(cell => cell !== '')) {
+                gameActive = false;
+                updateScore('draw');
+                statusDisplay.textContent = '🤝 Empate! Ninguém ganhou.';
+                statusDisplay.classList.remove('waiting-bot');
+                isWaitingForBot = false;
+            } else {
+                currentPlayer = currentPlayer === 'X' ? 'O' : 'X';
+                if (!isWaitingForBot) {
+                    statusDisplay.textContent = `Vez do ${getCurrentPlayerName()}`;
+                }
+            }
+        }
+
+        function makeBotMove() {
+            if (!gameActive || currentPlayer !== getBotSymbol()) {
+                isWaitingForBot = false;
+                statusDisplay.classList.remove('waiting-bot');
+                return;
+            }
+
+            const bestMove = getBestMove();
+            makeMove(bestMove, currentPlayer);
+            
+            isWaitingForBot = false;
+            statusDisplay.classList.remove('waiting-bot');
+        }
+
+        function getBestMove() {
+            // Estratégia do bot: Minimax simples
+            
+            // 1. Verificar se pode ganhar
+            for (let i = 0; i < 9; i++) {
+                if (board[i] === '') {
+                    board[i] = getBotSymbol();
+                    if (checkWinner() && getWinner() === 'bot') {
+                        board[i] = '';
+                        return i;
+                    }
+                    board[i] = '';
+                }
+            }
+
+            // 2. Verificar se precisa bloquear o jogador
+            const playerSymbol = getPlayerSymbol();
+            for (let i = 0; i < 9; i++) {
+                if (board[i] === '') {
+                    board[i] = playerSymbol;
+                    if (checkWinner() && getWinner() === 'player') {
+                        board[i] = '';
+                        return i;
+                    }
+                    board[i] = '';
+                }
+            }
+
+            // 3. Prioridades: centro, cantos, lados
+            const priorities = [4, 0, 2, 6, 8, 1, 3, 5, 7];
+            for (const index of priorities) {
+                if (board[index] === '') {
+                    return index;
+                }
+            }
+
+            // 4. Movimento aleatório (backup)
+            const availableMoves = board
+                .map((cell, index) => cell === '' ? index : null)
+                .filter(index => index !== null);
+            
+            return availableMoves[Math.floor(Math.random() * availableMoves.length)];
+        }
+
+        function checkWinner() {
+            return winningConditions.some(condition => {
+                const [a, b, c] = condition;
+                return board[a] && board[a] === board[b] && board[a] === board[c];
+            });
+        }
+
+        function getWinner() {
+            for (const condition of winningConditions) {
+                const [a, b, c] = condition;
+                if (board[a] && board[a] === board[b] && board[a] === board[c]) {
+                    if (board[a] === getBotSymbol()) {
+                        return 'bot';
+                    } else {
+                        return 'player';
+                    }
+                }
+            }
+            return null;
+        }
+
+        function getBotSymbol() {
+            return gameMode === 'bot-first' ? 'X' : 'O';
+        }
+
+        function getPlayerSymbol() {
+            return gameMode === 'human-first' ? 'X' : 'O';
+        }
+
+        function getCurrentPlayerName() {
+            if (currentPlayer === getBotSymbol()) {
+                return '🤖 Bot';
+            } else {
+                return '👤 Player';
+            }
+        }
+
+        function getWinnerMessage(winner) {
+            switch (winner) {
+                case 'bot':
+                    return '🤖 Bot ganhou! Muito bem jogado!';
+                case 'player':
+                    return '👤 Player ganhou! Parabéns!';
+                default:
+                    return '🤝 Empate!';
+            }
+        }
+
+        function updateScore(winner) {
+            scores[winner]++;
+            document.getElementById('botScore').textContent = scores.bot;
+            document.getElementById('playerScore').textContent = scores.player;
+            document.getElementById('drawScore').textContent = scores.draw;
+        }
+
+        function newGame() {
+            board = ['', '', '', '', '', '', '', '', ''];
+            currentPlayer = 'X';
+            gameActive = true;
+            isWaitingForBot = false;
+            
+            cells.forEach(cell => {
+                cell.textContent = '';
+                cell.disabled = false;
+                cell.classList.remove('x', 'o');
+            });
+
+            statusDisplay.classList.remove('waiting-bot');
+            statusDisplay.textContent = `Jogo iniciado! Vez do ${getCurrentPlayerName()}`;
+
+            // Se o bot começa, fazer primeira jogada
+            if (gameMode === 'bot-first') {
+                isWaitingForBot = true;
+                statusDisplay.textContent = '🤖 Bot está pensando...';
+                statusDisplay.classList.add('waiting-bot');
+                
+                setTimeout(() => {
+                    if (gameActive) {
+                        makeBotMove();
+                    }
+                }, 1000);
+            }
+        }
+
+        function resetScore() {
+            scores = { bot: 0, player: 0, draw: 0 };
+            document.getElementById('botScore').textContent = '0';
+            document.getElementById('playerScore').textContent = '0';
+            document.getElementById('drawScore').textContent = '0';
+        }
+
+        function toggleGameMode() {
+            gameMode = gameMode === 'human-first' ? 'bot-first' : 'human-first';
+            gameModeSelect.value = gameMode;
+            
+            if (gameActive) {
+                newGame();
+            }
+        }
+
+        // Funções para automação do bot (para serem chamadas externamente)
+        window.getBoardState = function() {
+            return {
+                board: [...board],
+                currentPlayer,
+                gameActive,
+                isWaitingForBot,
+                gameMode,
+                scores: {...scores},
+                availableMoves: board.map((cell, index) => cell === '' ? index : null).filter(i => i !== null)
+            };
+        };
+
+        window.makeAutomaticMove = function(index) {
+            if (gameActive && board[index] === '' && currentPlayer === getBotSymbol()) {
+                makeMove(index, currentPlayer);
+                return true;
+            }
+            return false;
+        };
+
+        window.getGameAnalysis = function() {
+            return {
+                boardState: [...board],
+                gameActive,
+                currentTurn: getCurrentPlayerName(),
+                possibleWins: winningConditions.filter(condition => {
+                    const [a, b, c] = condition;
+                    const values = [board[a], board[b], board[c]];
+                    return values.filter(v => v === getBotSymbol()).length === 2 && values.includes('');
+                }),
+                blockingMoves: winningConditions.filter(condition => {
+                    const [a, b, c] = condition;
+                    const values = [board[a], board[b], board[c]];
+                    return values.filter(v => v === getPlayerSymbol()).length === 2 && values.includes('');
+                })
+            };
+        };
+    </script>
+</body>
+</html>

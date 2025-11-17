@@ -5,6 +5,11 @@
 
 import { BaseGame } from '../BaseGame.js';
 import { logger } from '../../utils/logger.js';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 class SimpleTestGame extends BaseGame {
   constructor(options = {}) {
@@ -494,3 +499,9 @@ class SimpleTestGame extends BaseGame {
 }
 
 export { SimpleTestGame };
+
+const gamePath = path.resolve(__dirname, 'SimpleTestGame.js');
+const gameUrl = url.pathToFileURL(gamePath).href;
+
+// Carregar o jogo usando o URL
+console.log(`Carregando jogo: ${gameUrl}`);

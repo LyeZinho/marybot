@@ -9,6 +9,11 @@ import { GameAI } from './ai/GameAI.js';
 import { GameSession } from './GameSession.js';
 import fs from 'fs';
 import path from 'path';
+import { spawn } from 'child_process';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 class GamingManager {
   constructor(client) {
@@ -17,6 +22,8 @@ class GamingManager {
     this.activeSessions = new Map();
     this.browserEngine = null;
     this.gameAI = null;
+    this.gameServerProcess = null;
+    this.gameServerPort = 3002;
     this.isInitialized = false;
     
     // Configurações
@@ -35,6 +42,9 @@ class GamingManager {
   async initialize() {
     try {
       logger.info('🎮 Inicializando sistema de gaming...');
+
+      // Inicializar servidor de jogos
+      await this.startGameServer();
 
       // Inicializar motor de jogos no browser
       if (this.config.enableBrowserGames) {
@@ -69,33 +79,96 @@ class GamingManager {
    * Carregar jogos disponíveis
    */
   async loadAvailableGames() {
-    const gamesDir = path.join(process.cwd(), 'src', 'gaming', 'games');
+    // Carregar jogos JS (se existirem)
+    const jsGamesDir = path.join(process.cwd(), 'src', 'gaming', 'games');
     
-    if (!fs.existsSync(gamesDir)) {
-      logger.warn('⚠️ Diretório de jogos não encontrado');
-      return;
+    if (fs.existsSync(jsGamesDir)) {
+      const gameFiles = fs.readdirSync(jsGamesDir).filter(file => file.endsWith('.js'));
+      
+      for (const gameFile of gameFiles) {
+        try {
+          const GameClass = await import(path.join(jsGamesDir, gameFile));
+          const game = new GameClass.default();
+          
+          this.games.set(game.id, {
+            class: GameClass.default,
+            metadata: game.getMetadata(),
+            instance: game,
+            type: 'javascript'
+          });
+          
+          logger.info(`🎯 Jogo JS carregado: ${game.getMetadata().name}`);
+        } catch (error) {
+          logger.error(`❌ Erro ao carregar jogo ${gameFile}:`, error);
+        }
+      }
     }
 
-    const gameFiles = fs.readdirSync(gamesDir).filter(file => file.endsWith('.js'));
+    // Carregar jogos HTML
+    const htmlGamesDir = path.join(process.cwd(), 'games');
     
-    for (const gameFile of gameFiles) {
-      try {
-        const GameClass = await import(path.join(gamesDir, gameFile));
-        const game = new GameClass.default();
+    if (fs.existsSync(htmlGamesDir)) {
+      const gameDirs = fs.readdirSync(htmlGamesDir, { withFileTypes: true })
+        .filter(dirent => dirent.isDirectory())
+        .map(dirent => dirent.name);
+      
+      for (const gameDir of gameDirs) {
+        const indexPath = path.join(htmlGamesDir, gameDir, 'index.html');
         
-        this.games.set(game.id, {
-          class: GameClass.default,
-          metadata: game.getMetadata(),
-          instance: game
-        });
-        
-        logger.info(`🎯 Jogo carregado: ${game.getMetadata().name}`);
-      } catch (error) {
-        logger.error(`❌ Erro ao carregar jogo ${gameFile}:`, error);
+        if (fs.existsSync(indexPath)) {
+          const gameId = gameDir;
+          const gameUrl = this.getGameServerUrl(`/${gameDir}/index.html`);
+          
+          this.games.set(gameId, {
+            id: gameId,
+            name: this.formatGameName(gameId),
+            type: 'html',
+            url: gameUrl,
+            path: indexPath,
+            description: this.getGameDescription(gameId),
+            metadata: {
+              name: this.formatGameName(gameId),
+              description: this.getGameDescription(gameId),
+              type: 'html',
+              category: 'web-game',
+              requiresBrowser: true
+            }
+          });
+          
+          logger.info(`🌐 Jogo HTML carregado: ${this.formatGameName(gameId)}`);
+        }
       }
     }
 
     logger.info(`🎮 ${this.games.size} jogo(s) carregado(s)`);
+  }
+
+  /**
+   * 🎯 Formatar nome do jogo
+   */
+  formatGameName(gameId) {
+    const names = {
+      'tic-tac-toe': 'Jogo da Velha',
+      'snake': 'Snake Game',
+      'chess': 'Xadrez',
+      'connect4': 'Conecta 4',
+      '2048': '2048'
+    };
+    return names[gameId] || gameId.charAt(0).toUpperCase() + gameId.slice(1);
+  }
+
+  /**
+   * 🎯 Obter descrição do jogo
+   */
+  getGameDescription(gameId) {
+    const descriptions = {
+      'tic-tac-toe': 'Clássico jogo da velha com IA estratégica usando algoritmo minimax',
+      'snake': 'Jogo da cobrinha com IA usando algoritmos de pathfinding A*',
+      'chess': 'Xadrez completo com IA avançada usando minimax e alpha-beta pruning',
+      'connect4': 'Conecta 4 com IA usando expectiminimax e avaliação heurística',
+      '2048': 'Puzzle numérico com IA otimizada usando expectiminimax'
+    };
+    return descriptions[gameId] || 'Jogo interativo com IA para treinamento';
   }
 
   /**
@@ -208,7 +281,38 @@ class GamingManager {
    * Obter lista de jogos disponíveis
    */
   getAvailableGames() {
-    return Array.from(this.games.values()).map(game => game.metadata);
+    return Array.from(this.games.values()).map(game => {
+      // Para jogos HTML, retornar estrutura compatível
+      if (game.type === 'html') {
+        return {
+          gameId: game.id,
+          name: game.name,
+          type: game.type,
+          url: game.url,
+          description: game.description,
+          metadata: game.metadata
+        };
+      }
+      
+      // Para jogos JS, retornar metadata
+      return game.metadata;
+    });
+  }
+
+  /**
+   * 📊 Obter estatísticas da IA
+   */
+  async getAIStats() {
+    if (!this.gameAI) {
+      return {
+        models: {},
+        totalActions: 0,
+        completedSessions: 0,
+        averageAccuracy: 0
+      };
+    }
+    
+    return await this.gameAI.getStatistics();
   }
 
   /**
@@ -281,6 +385,9 @@ class GamingManager {
         await this.gameAI.saveData();
       }
 
+      // Encerrar servidor de jogos
+      await this.stopGameServer();
+
       this.isInitialized = false;
       logger.success('✅ Sistema de gaming encerrado com sucesso!');
 
@@ -288,6 +395,137 @@ class GamingManager {
       logger.error('❌ Erro ao encerrar sistema de gaming:', error);
     }
   }
+
+  /**
+   * 🌐 Iniciar servidor de jogos
+   */
+  async startGameServer() {
+    try {
+      if (this.gameServerProcess) {
+        logger.warn('⚠️ Servidor de jogos já está rodando');
+        return;
+      }
+
+      const gameServerPath = path.join(__dirname, '../../games/gameServer.js');
+      
+      if (!fs.existsSync(gameServerPath)) {
+        logger.warn('⚠️ Servidor de jogos não encontrado:', gameServerPath);
+        return;
+      }
+
+      // Iniciar processo do servidor
+      this.gameServerProcess = spawn('node', [gameServerPath], {
+        stdio: ['ignore', 'pipe', 'pipe'],
+        cwd: path.dirname(gameServerPath)
+      });
+
+      // Monitorar output
+      this.gameServerProcess.stdout.on('data', (data) => {
+        logger.info('🌐 Game Server:', data.toString().trim());
+      });
+
+      this.gameServerProcess.stderr.on('data', (data) => {
+        logger.error('🌐 Game Server Error:', data.toString().trim());
+      });
+
+      // Monitorar encerramento
+      this.gameServerProcess.on('close', (code) => {
+        logger.info(`🌐 Servidor de jogos encerrado com código: ${code}`);
+        this.gameServerProcess = null;
+      });
+
+      this.gameServerProcess.on('error', (error) => {
+        logger.error('❌ Erro no servidor de jogos:', error);
+        this.gameServerProcess = null;
+      });
+
+      // Aguardar inicialização
+      await this.waitForServerReady();
+      logger.success(`✅ Servidor de jogos iniciado na porta ${this.gameServerPort}`);
+
+    } catch (error) {
+      logger.error('❌ Erro ao iniciar servidor de jogos:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * 🛑 Parar servidor de jogos
+   */
+  async stopGameServer() {
+    try {
+      if (!this.gameServerProcess) {
+        return;
+      }
+
+      logger.info('🛑 Encerrando servidor de jogos...');
+      
+      // Enviar sinal de encerramento
+      this.gameServerProcess.kill('SIGTERM');
+      
+      // Aguardar encerramento
+      await new Promise((resolve) => {
+        this.gameServerProcess.on('close', resolve);
+        
+        // Forçar encerramento após 5 segundos
+        setTimeout(() => {
+          if (this.gameServerProcess) {
+            this.gameServerProcess.kill('SIGKILL');
+          }
+          resolve();
+        }, 5000);
+      });
+
+      this.gameServerProcess = null;
+      logger.success('✅ Servidor de jogos encerrado');
+
+    } catch (error) {
+      logger.error('❌ Erro ao encerrar servidor de jogos:', error);
+    }
+  }
+
+  /**
+   * ⏳ Aguardar servidor ficar pronto
+   */
+  async waitForServerReady(maxAttempts = 30, interval = 1000) {
+    const http = await import('http');
+    
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      try {
+        await new Promise((resolve, reject) => {
+          const req = http.request(`http://localhost:${this.gameServerPort}`, resolve);
+          req.on('error', reject);
+          req.end();
+        });
+        
+        return true; // Servidor está pronto
+      } catch (error) {
+        if (attempt === maxAttempts) {
+          throw new Error(`Servidor não ficou pronto após ${maxAttempts} tentativas`);
+        }
+        
+        // Aguardar antes da próxima tentativa
+        await new Promise(resolve => setTimeout(resolve, interval));
+      }
+    }
+  }
+
+  /**
+   * 🌐 Obter URL do servidor de jogos
+   */
+  getGameServerUrl(gamePath = '') {
+    return `http://localhost:${this.gameServerPort}${gamePath}`;
+  }
+
+
+
+
+
+
+
+
+
+
 }
 
 // Criar instância singleton

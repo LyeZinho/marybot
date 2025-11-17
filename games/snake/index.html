@@ -1,0 +1,612 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Snake Game - Bot vs Player</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            background-color: #1a1a2e;
+            color: white;
+            margin: 0;
+            padding: 20px;
+        }
+
+        .game-container {
+            text-align: center;
+            max-width: 600px;
+            width: 100%;
+        }
+
+        .game-info {
+            display: flex;
+            justify-content: space-between;
+            margin: 20px 0;
+            gap: 20px;
+        }
+
+        .info-box {
+            background-color: #16213e;
+            padding: 15px;
+            border-radius: 10px;
+            flex: 1;
+        }
+
+        .game-board {
+            margin: 20px auto;
+            border: 3px solid #0f4c75;
+            border-radius: 10px;
+            background-color: #16213e;
+        }
+
+        canvas {
+            display: block;
+            background-color: #0f3460;
+            border-radius: 7px;
+        }
+
+        .controls {
+            margin: 20px 0;
+        }
+
+        button {
+            padding: 10px 20px;
+            font-size: 1em;
+            background-color: #e94560;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            margin: 5px;
+        }
+
+        button:hover {
+            background-color: #d63447;
+        }
+
+        button:disabled {
+            background-color: #666;
+            cursor: not-allowed;
+        }
+
+        .status {
+            font-size: 1.2em;
+            margin: 10px 0;
+            padding: 10px;
+            background-color: #16213e;
+            border-radius: 5px;
+        }
+
+        .game-mode {
+            margin: 20px 0;
+        }
+
+        .game-mode select, .difficulty select {
+            padding: 5px 10px;
+            font-size: 1em;
+            border-radius: 5px;
+            border: none;
+            background-color: #16213e;
+            color: white;
+        }
+
+        .bot-thinking {
+            color: #f39c12;
+            font-weight: bold;
+        }
+
+        .direction-buttons {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 10px;
+            max-width: 200px;
+            margin: 0 auto;
+        }
+
+        .direction-buttons button {
+            width: 50px;
+            height: 50px;
+            font-size: 1.2em;
+            padding: 0;
+        }
+
+        .empty-cell {
+            visibility: hidden;
+        }
+    </style>
+</head>
+<body>
+    <div class="game-container">
+        <h1>🐍 Snake Game</h1>
+        <h2>Bot vs Player Challenge</h2>
+
+        <div class="game-mode">
+            <label for="gameMode">Modo de Jogo:</label>
+            <select id="gameMode">
+                <option value="player">Player Manual</option>
+                <option value="bot">Bot Automático</option>
+                <option value="competition">Competição</option>
+            </select>
+            
+            <label for="difficulty" style="margin-left: 20px;">Dificuldade:</label>
+            <select id="difficulty">
+                <option value="easy">Fácil</option>
+                <option value="medium">Médio</option>
+                <option value="hard">Difícil</option>
+            </select>
+        </div>
+
+        <div class="game-info">
+            <div class="info-box">
+                <div><strong>📊 Pontuação</strong></div>
+                <div id="score">0</div>
+            </div>
+            <div class="info-box">
+                <div><strong>🏆 Recorde</strong></div>
+                <div id="highScore">0</div>
+            </div>
+            <div class="info-box">
+                <div><strong>🐍 Tamanho</strong></div>
+                <div id="snakeLength">1</div>
+            </div>
+            <div class="info-box">
+                <div><strong>⚡ Velocidade</strong></div>
+                <div id="gameSpeed">Normal</div>
+            </div>
+        </div>
+
+        <div class="status" id="gameStatus">
+            Pressione "Novo Jogo" para começar!
+        </div>
+
+        <div class="game-board">
+            <canvas id="gameCanvas" width="400" height="400"></canvas>
+        </div>
+
+        <div class="controls">
+            <button onclick="newGame()">🎯 Novo Jogo</button>
+            <button onclick="pauseGame()" id="pauseBtn">⏸️ Pausar</button>
+            <button onclick="toggleMode()">🤖 Trocar Modo</button>
+        </div>
+
+        <div class="direction-buttons">
+            <div class="empty-cell"></div>
+            <button onclick="changeDirection('up')" id="upBtn">⬆️</button>
+            <div class="empty-cell"></div>
+            <button onclick="changeDirection('left')" id="leftBtn">⬅️</button>
+            <div class="empty-cell"></div>
+            <button onclick="changeDirection('right')" id="rightBtn">➡️</button>
+            <div class="empty-cell"></div>
+            <button onclick="changeDirection('down')" id="downBtn">⬇️</button>
+            <div class="empty-cell"></div>
+        </div>
+
+        <div style="margin-top: 30px;">
+            <h3>🎮 Como Jogar</h3>
+            <p><strong>Player:</strong> Use as setas do teclado ou botões para mover a cobra</p>
+            <p><strong>Bot:</strong> Assista o bot jogar usando algoritmos inteligentes</p>
+            <p><strong>Objetivo:</strong> Coma as frutas sem bater nas paredes ou no próprio corpo</p>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const gridSize = 20;
+        const tileCount = canvas.width / gridSize;
+
+        let snake = [{ x: 10, y: 10 }];
+        let food = {};
+        let dx = 0;
+        let dy = 0;
+        let score = 0;
+        let highScore = localStorage.getItem('snakeHighScore') || 0;
+        let gameRunning = false;
+        let isPaused = false;
+        let gameMode = 'player';
+        let difficulty = 'medium';
+        let gameLoop = null;
+        let botThinking = false;
+
+        const speeds = {
+            easy: 150,
+            medium: 100,
+            hard: 60
+        };
+
+        // Elementos DOM
+        const scoreElement = document.getElementById('score');
+        const highScoreElement = document.getElementById('highScore');
+        const snakeLengthElement = document.getElementById('snakeLength');
+        const gameSpeedElement = document.getElementById('gameSpeed');
+        const statusElement = document.getElementById('gameStatus');
+        const gameModeSelect = document.getElementById('gameMode');
+        const difficultySelect = document.getElementById('difficulty');
+        const pauseBtn = document.getElementById('pauseBtn');
+
+        // Inicializar
+        highScoreElement.textContent = highScore;
+        updateDisplay();
+
+        // Event listeners
+        gameModeSelect.addEventListener('change', (e) => {
+            gameMode = e.target.value;
+            if (gameRunning) {
+                newGame();
+            }
+        });
+
+        difficultySelect.addEventListener('change', (e) => {
+            difficulty = e.target.value;
+            gameSpeedElement.textContent = difficulty.charAt(0).toUpperCase() + difficulty.slice(1);
+            if (gameRunning) {
+                restartGameLoop();
+            }
+        });
+
+        document.addEventListener('keydown', (e) => {
+            if (gameMode === 'player' && gameRunning && !isPaused) {
+                switch (e.key) {
+                    case 'ArrowUp':
+                    case 'w':
+                    case 'W':
+                        if (dy !== 1) changeDirection('up');
+                        break;
+                    case 'ArrowDown':
+                    case 's':
+                    case 'S':
+                        if (dy !== -1) changeDirection('down');
+                        break;
+                    case 'ArrowLeft':
+                    case 'a':
+                    case 'A':
+                        if (dx !== 1) changeDirection('left');
+                        break;
+                    case 'ArrowRight':
+                    case 'd':
+                    case 'D':
+                        if (dx !== -1) changeDirection('right');
+                        break;
+                    case ' ':
+                        e.preventDefault();
+                        pauseGame();
+                        break;
+                }
+            }
+        });
+
+        function changeDirection(direction) {
+            if (!gameRunning || isPaused) return;
+
+            switch (direction) {
+                case 'up':
+                    if (dy !== 1) { dx = 0; dy = -1; }
+                    break;
+                case 'down':
+                    if (dy !== -1) { dx = 0; dy = 1; }
+                    break;
+                case 'left':
+                    if (dx !== 1) { dx = -1; dy = 0; }
+                    break;
+                case 'right':
+                    if (dx !== -1) { dx = 1; dy = 0; }
+                    break;
+            }
+        }
+
+        function generateFood() {
+            food = {
+                x: Math.floor(Math.random() * tileCount),
+                y: Math.floor(Math.random() * tileCount)
+            };
+
+            // Verificar se a comida não está na cobra
+            for (let segment of snake) {
+                if (segment.x === food.x && segment.y === food.y) {
+                    generateFood();
+                    return;
+                }
+            }
+        }
+
+        function drawGame() {
+            // Limpar canvas
+            ctx.fillStyle = '#0f3460';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // Desenhar cobra
+            ctx.fillStyle = '#27ae60';
+            for (let i = 0; i < snake.length; i++) {
+                const segment = snake[i];
+                // Cabeça da cobra em cor diferente
+                if (i === 0) {
+                    ctx.fillStyle = '#2ecc71';
+                } else {
+                    ctx.fillStyle = '#27ae60';
+                }
+                
+                ctx.fillRect(segment.x * gridSize, segment.y * gridSize, gridSize - 2, gridSize - 2);
+                
+                // Olhos da cobra na cabeça
+                if (i === 0) {
+                    ctx.fillStyle = '#ffffff';
+                    ctx.fillRect(segment.x * gridSize + 5, segment.y * gridSize + 5, 3, 3);
+                    ctx.fillRect(segment.x * gridSize + 12, segment.y * gridSize + 5, 3, 3);
+                }
+            }
+
+            // Desenhar comida
+            ctx.fillStyle = '#e74c3c';
+            ctx.fillRect(food.x * gridSize, food.y * gridSize, gridSize - 2, gridSize - 2);
+            
+            // Desenhar efeito na comida
+            ctx.fillStyle = '#c0392b';
+            ctx.fillRect(food.x * gridSize + 2, food.y * gridSize + 2, gridSize - 6, gridSize - 6);
+        }
+
+        function moveSnake() {
+            const head = { x: snake[0].x + dx, y: snake[0].y + dy };
+
+            // Verificar colisão com paredes
+            if (head.x < 0 || head.x >= tileCount || head.y < 0 || head.y >= tileCount) {
+                gameOver();
+                return;
+            }
+
+            // Verificar colisão consigo mesmo
+            for (let segment of snake) {
+                if (head.x === segment.x && head.y === segment.y) {
+                    gameOver();
+                    return;
+                }
+            }
+
+            snake.unshift(head);
+
+            // Verificar se comeu a comida
+            if (head.x === food.x && head.y === food.y) {
+                score += 10;
+                updateDisplay();
+                generateFood();
+            } else {
+                snake.pop();
+            }
+        }
+
+        function botMove() {
+            if (gameMode !== 'bot' || !gameRunning || isPaused) return;
+
+            botThinking = true;
+            statusElement.textContent = '🤖 Bot calculando próximo movimento...';
+            statusElement.classList.add('bot-thinking');
+
+            // Algoritmo A* simplificado para encontrar caminho para a comida
+            const head = snake[0];
+            const bestMove = findBestMove(head, food);
+            
+            if (bestMove) {
+                dx = bestMove.dx;
+                dy = bestMove.dy;
+            }
+
+            botThinking = false;
+            statusElement.classList.remove('bot-thinking');
+            updateStatus();
+        }
+
+        function findBestMove(head, target) {
+            const possibleMoves = [
+                { dx: 0, dy: -1 }, // up
+                { dx: 0, dy: 1 },  // down
+                { dx: -1, dy: 0 }, // left
+                { dx: 1, dy: 0 }   // right
+            ];
+
+            let bestMove = null;
+            let bestDistance = Infinity;
+            let bestSafety = -1;
+
+            for (let move of possibleMoves) {
+                // Não pode reverter
+                if (move.dx === -dx && move.dy === -dy && snake.length > 1) continue;
+
+                const newPos = { x: head.x + move.dx, y: head.y + move.dy };
+
+                // Verificar se o movimento é válido
+                if (isValidMove(newPos)) {
+                    const distance = Math.abs(newPos.x - target.x) + Math.abs(newPos.y - target.y);
+                    const safety = calculateSafety(newPos);
+                    
+                    // Priorizar segurança, depois distância
+                    if (safety > bestSafety || (safety === bestSafety && distance < bestDistance)) {
+                        bestMove = move;
+                        bestDistance = distance;
+                        bestSafety = safety;
+                    }
+                }
+            }
+
+            return bestMove;
+        }
+
+        function isValidMove(pos) {
+            // Verificar paredes
+            if (pos.x < 0 || pos.x >= tileCount || pos.y < 0 || pos.y >= tileCount) {
+                return false;
+            }
+
+            // Verificar colisão com corpo
+            for (let segment of snake) {
+                if (pos.x === segment.x && pos.y === segment.y) {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        function calculateSafety(pos) {
+            let safety = 0;
+            
+            // Contar espaços livres ao redor
+            const directions = [
+                { dx: 0, dy: -1 }, { dx: 0, dy: 1 },
+                { dx: -1, dy: 0 }, { dx: 1, dy: 0 }
+            ];
+
+            for (let dir of directions) {
+                const checkPos = { x: pos.x + dir.dx, y: pos.y + dir.dy };
+                if (isValidMove(checkPos)) {
+                    safety++;
+                }
+            }
+
+            return safety;
+        }
+
+        function gameLoop() {
+            if (!gameRunning || isPaused) return;
+
+            if (gameMode === 'bot') {
+                botMove();
+            }
+
+            moveSnake();
+            drawGame();
+        }
+
+        function newGame() {
+            snake = [{ x: 10, y: 10 }];
+            dx = 0;
+            dy = 0;
+            score = 0;
+            gameRunning = true;
+            isPaused = false;
+            
+            generateFood();
+            updateDisplay();
+            updateStatus();
+            
+            pauseBtn.textContent = '⏸️ Pausar';
+            pauseBtn.disabled = false;
+
+            restartGameLoop();
+        }
+
+        function restartGameLoop() {
+            if (gameLoop) {
+                clearInterval(gameLoop);
+            }
+            
+            gameLoop = setInterval(() => {
+                gameLoop();
+            }, speeds[difficulty]);
+        }
+
+        function pauseGame() {
+            if (!gameRunning) return;
+
+            isPaused = !isPaused;
+            pauseBtn.textContent = isPaused ? '▶️ Continuar' : '⏸️ Pausar';
+            updateStatus();
+        }
+
+        function gameOver() {
+            gameRunning = false;
+            clearInterval(gameLoop);
+            
+            if (score > highScore) {
+                highScore = score;
+                localStorage.setItem('snakeHighScore', highScore);
+                highScoreElement.textContent = highScore;
+                statusElement.textContent = `🎉 Novo recorde! Pontuação: ${score}`;
+            } else {
+                statusElement.textContent = `💀 Game Over! Pontuação: ${score}`;
+            }
+            
+            pauseBtn.textContent = '⏸️ Pausar';
+            pauseBtn.disabled = true;
+        }
+
+        function toggleMode() {
+            const modes = ['player', 'bot', 'competition'];
+            const currentIndex = modes.indexOf(gameMode);
+            gameMode = modes[(currentIndex + 1) % modes.length];
+            gameModeSelect.value = gameMode;
+            
+            if (gameRunning) {
+                newGame();
+            }
+        }
+
+        function updateDisplay() {
+            scoreElement.textContent = score;
+            snakeLengthElement.textContent = snake.length;
+            gameSpeedElement.textContent = difficulty.charAt(0).toUpperCase() + difficulty.slice(1);
+        }
+
+        function updateStatus() {
+            if (!gameRunning) return;
+            
+            if (isPaused) {
+                statusElement.textContent = '⏸️ Jogo pausado';
+            } else if (gameMode === 'bot') {
+                statusElement.textContent = '🤖 Bot jogando automaticamente';
+            } else {
+                statusElement.textContent = '🎮 Use as setas para controlar a cobra';
+            }
+        }
+
+        // Funções para automação externa (para o bot do Discord)
+        window.getGameState = function() {
+            return {
+                snake: [...snake],
+                food: {...food},
+                score,
+                gameRunning,
+                isPaused,
+                gameMode,
+                difficulty,
+                boardSize: { width: tileCount, height: tileCount },
+                direction: { dx, dy }
+            };
+        };
+
+        window.makeAutomaticMove = function(direction) {
+            if (gameRunning && !isPaused) {
+                changeDirection(direction);
+                return true;
+            }
+            return false;
+        };
+
+        window.getGameAnalysis = function() {
+            const head = snake[0];
+            return {
+                snakeHead: head,
+                foodPosition: food,
+                distanceToFood: Math.abs(head.x - food.x) + Math.abs(head.y - food.y),
+                snakeLength: snake.length,
+                possibleMoves: [
+                    { direction: 'up', valid: isValidMove({ x: head.x, y: head.y - 1 }) },
+                    { direction: 'down', valid: isValidMove({ x: head.x, y: head.y + 1 }) },
+                    { direction: 'left', valid: isValidMove({ x: head.x - 1, y: head.y }) },
+                    { direction: 'right', valid: isValidMove({ x: head.x + 1, y: head.y }) }
+                ],
+                gameStatus: {
+                    running: gameRunning,
+                    paused: isPaused,
+                    score: score
+                }
+            };
+        };
+
+        // Inicializar o jogo
+        drawGame();
+    </script>
+</body>
+</html>

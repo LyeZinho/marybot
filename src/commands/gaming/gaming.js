@@ -153,9 +153,21 @@ async function handleListGames(interaction) {
       });
     }
 
+    const serverUrl = gamingManager.getGameServerUrl();
+    
     const embed = new EmbedBuilder()
       .setTitle('🎮 Jogos Disponíveis')
-      .setDescription('Lista de jogos que podem ser executados pela IA')
+      .setDescription([
+        'Lista de jogos que podem ser executados pela IA',
+        '',
+        '🌐 **Portal de Jogos:**',
+        `[Abrir Portal](${serverUrl})`,
+        '',
+        '💡 **Como usar:**',
+        '• Use `/gaming play` para iniciar um jogo',
+        '• A IA pode jogar automaticamente',
+        '• Acesse o portal web para jogar manualmente'
+      ].join('\n'))
       .setColor(0x00ff00)
       .setTimestamp();
 
@@ -175,6 +187,10 @@ async function handleListGames(interaction) {
     // Adicionar botões para jogos populares
     const row = new ActionRowBuilder()
       .addComponents(
+        new ButtonBuilder()
+          .setURL(serverUrl)
+          .setLabel('🌐 Abrir Portal')
+          .setStyle(ButtonStyle.Link),
         new ButtonBuilder()
           .setCustomId('gaming_browser_example')
           .setLabel('🕸️ Exemplo Browser')

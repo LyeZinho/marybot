@@ -26,9 +26,19 @@ function getTimestamp() {
 
 function formatMessage(level, message, ...args) {
   const timestamp = getTimestamp();
-  const formattedArgs = args.length > 0 ? ' ' + args.map(arg => 
-    typeof arg === 'object' ? JSON.stringify(arg, null, 2) : String(arg)
-  ).join(' ') : '';
+  const formattedArgs = args.length > 0 ? ' ' + args.map(arg => {
+    if (typeof arg === 'object') {
+      if (arg === null) return 'null';
+      if (arg instanceof Error) return `${arg.name}: ${arg.message}`;
+      try {
+        const stringified = JSON.stringify(arg, null, 2);
+        return stringified === '{}' ? '[Empty Object]' : stringified;
+      } catch (e) {
+        return '[Circular/Unserializable Object]';
+      }
+    }
+    return String(arg);
+  }).join(' ') : '';
   
   return `[${timestamp}] [${level}] ${message}${formattedArgs}`;
 }

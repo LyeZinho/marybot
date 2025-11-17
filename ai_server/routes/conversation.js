@@ -9,6 +9,78 @@ const gpt2 = getGPT2Service();
 // Middleware de rate limiting para rotas de conversação
 router.use(aiRateLimit);
 
+// Endpoint direto para conversação (compatibilidade)
+router.post('/', async (req, res) => {
+  try {
+    const { 
+      user_message, 
+      history = [], 
+      personality = 'friendly_female_assistant',
+      language = 'pt-BR',
+      guildId,
+      guildName,
+      channelType,
+      userName 
+    } = req.body;
+
+    if (!user_message) {
+      return res.status(400).json({
+        error: true,
+        message: 'Campo "user_message" é obrigatório'
+      });
+    }
+
+    // Construir mensagens para o GPT-2
+    const messages = [];
+    
+    // Adicionar histórico se existir
+    if (history && Array.isArray(history)) {
+      history.forEach(msg => {
+        if (msg.user) messages.push({ role: 'user', content: msg.user });
+        if (msg.assistant) messages.push({ role: 'assistant', content: msg.assistant });
+      });
+    }
+    
+    // Adicionar mensagem atual
+    messages.push({ role: 'user', content: user_message });
+
+    const options = {
+      personality,
+      language,
+      context: {
+        guildId,
+        guildName, 
+        channelType,
+        userName
+      }
+    };
+
+    const result = await gpt2.generateConversation(messages, options);
+
+    // Validar resposta gerada
+    if (!result || !result.response || result.response.trim() === '') {
+      logger.warn('⚠️ Resposta inválida gerada pela IA');
+      return res.status(500).json({
+        error: true,
+        message: 'A IA não gerou uma resposta válida'
+      });
+    }
+
+    res.json({
+      success: true,
+      response: result.response || result.text,
+      confidence: result.confidence || 0.8
+    });
+
+  } catch (error) {
+    logger.error('Erro na conversação direta:', error);
+    res.status(500).json({
+      error: true,
+      message: error.message
+    });
+  }
+});
+
 // Gerar resposta de conversação
 router.post('/generate', async (req, res) => {
   try {

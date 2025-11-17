@@ -5,6 +5,11 @@
 
 import { BaseGame } from '../BaseGame.js';
 import { logger } from '../../utils/logger.js';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 class ExampleBrowserGame extends BaseGame {
   constructor(gameUrl, options = {}) {
@@ -149,7 +154,7 @@ class ExampleBrowserGame extends BaseGame {
       if (this.gameElements.startButton) {
         logger.info('🎯 Clicando no botão de iniciar...');
         await this.currentPage.click(this.gameElements.startButton);
-        await this.currentPage.waitForTimeout(1000);
+        await new Promise(resolve => setTimeout(resolve, 1000));
       }
 
       // Tirar screenshot inicial
@@ -250,7 +255,7 @@ class ExampleBrowserGame extends BaseGame {
         }
       }
       
-      await this.currentPage.waitForTimeout(100);
+      await new Promise(resolve => setTimeout(resolve, 100));
       
       return {
         success: true,
@@ -281,7 +286,7 @@ class ExampleBrowserGame extends BaseGame {
       } else if (keys) {
         for (const k of keys) {
           await this.currentPage.keyboard.press(k);
-          await this.currentPage.waitForTimeout(50);
+          await new Promise(resolve => setTimeout(resolve, 50));
         }
         logger.info(`⌨️ Sequência de teclas: ${keys.join(', ')}`);
         
@@ -396,7 +401,7 @@ class ExampleBrowserGame extends BaseGame {
       } else if (condition) {
         await this.currentPage.waitForFunction(condition, { timeout: time });
       } else {
-        await this.currentPage.waitForTimeout(time);
+        await new Promise(resolve => setTimeout(resolve, time));
       }
       
       return {
@@ -584,3 +589,9 @@ class ExampleBrowserGame extends BaseGame {
 }
 
 export { ExampleBrowserGame };
+
+const gamePath = path.resolve(__dirname, 'ExampleBrowserGame.js');
+const gameUrl = fileURLToPath(gamePath);
+
+// Carregar o jogo usando o URL
+console.log(`Carregando jogo: ${gameUrl}`);

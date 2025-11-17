@@ -7,6 +7,7 @@ import { SlashCommandBuilder, EmbedBuilder } from 'discord.js';
 import { configManager } from '../../utils/configManager.js';
 
 export default {
+  name: 'config-ai',
   data: new SlashCommandBuilder()
     .setName('config-ai')
     .setDescription('⚙️ Configurar parâmetros da IA do bot')
