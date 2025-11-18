@@ -7,6 +7,7 @@ import { getPrisma } from '../database/client.js';
 import { normalizeText } from './messageProcessor.js';
 import { generateEmbedding, findSimilarMessages } from './embeddingService.js';
 import { logger } from './logger.js';
+import { externalLLMService } from './ExternalLLMService.js';
 
 // 🧠 Memória de Curto Prazo (RAM) - Map<userId, conversationHistory[]>
 const shortTermMemory = new Map();
@@ -156,31 +157,64 @@ async function findRelevantContext(query, channelId) {
 }
 
 /**
- * Gera resposta baseada em contexto e heurísticas
+ * Gera resposta baseada em contexto e API LLM externa
  * @param {string} userId - ID do usuário
  * @param {string} userMessage - Mensagem do usuário
  * @param {Array} similarMessages - Mensagens similares da base
  * @returns {Promise<string>} Resposta gerada
  */
 async function generateResponse(userId, userMessage, similarMessages) {
-    // Obter histórico recente
-    const history = shortTermMemory.get(userId) || [];
-    
-    // 1. Respostas baseadas em padrões simples
-    const simpleResponse = getSimpleResponse(userMessage);
-    if (simpleResponse) return simpleResponse;
-    
-    // 2. Respostas baseadas em contexto recente
-    const contextResponse = getContextBasedResponse(history, userMessage);
-    if (contextResponse) return contextResponse;
-    
-    // 3. Respostas baseadas em similaridade (memória longa)
-    if (similarMessages.length > 0) {
-        return getSimilarityBasedResponse(similarMessages, userMessage);
+    try {
+        // Obter histórico recente
+        const history = shortTermMemory.get(userId) || [];
+        
+        // 1. Respostas baseadas em padrões simples (mantém alguns casos básicos)
+        const simpleResponse = getSimpleResponse(userMessage);
+        if (simpleResponse) return simpleResponse;
+        
+        // 2. Construir contexto para a API LLM
+        let context = 'Você é MaryBot, um bot de Discord amigável e útil. ';
+        context += 'Responda de forma natural e conversacional em português brasileiro. ';
+        context += 'Seja breve, mas informativo. Use emojis quando apropriado.';
+        
+        // Adicionar histórico recente ao contexto
+        if (history.length > 0) {
+            context += '\n\nHistórico da conversa recente:';
+            history.slice(-3).forEach(msg => {
+                const role = msg.role === 'user' ? 'Usuário' : 'Você';
+                context += `\n${role}: ${msg.content}`;
+            });
+        }
+        
+        // Adicionar contexto de mensagens similares
+        if (similarMessages.length > 0) {
+            context += '\n\nInformações relevantes do histórico:';
+            similarMessages.slice(0, 2).forEach(msg => {
+                context += `\n- ${msg.content.substring(0, 100)}...`;
+            });
+        }
+        
+        // 3. Gerar resposta usando API LLM
+        const llmResult = await externalLLMService.generateConversation({
+            prompt: userMessage,
+            context: context,
+            maxTokens: 150,
+            userId: userId
+        });
+        
+        if (llmResult.response && llmResult.response.trim()) {
+            logger.info(`🤖 Resposta LLM gerada para usuário ${userId}`);
+            return llmResult.response;
+        }
+        
+        // Fallback se LLM falhar
+        logger.warn('⚠️ API LLM retornou resposta vazia, usando fallback');
+        return getFallbackResponse(userMessage);
+        
+    } catch (error) {
+        logger.error('❌ Erro ao gerar resposta com LLM:', error.message);
+        return getFallbackResponse(userMessage);
     }
-    
-    // 4. Resposta padrão
-    return getDefaultResponse();
 }
 
 /**
@@ -314,6 +348,18 @@ function getDefaultResponse() {
         'Boa pergunta! Preciso pensar mais sobre isso... 💭',
         'Hmm, não tenho uma resposta clara agora. Que tal usar `m.help` para ver o que posso fazer?'
     ]);
+}
+
+/**
+ * Resposta fallback quando API LLM falha
+ */
+function getFallbackResponse(userMessage) {
+    // Tentar respostas baseadas em contexto primeiro
+    const contextResponse = getContextBasedResponse([], userMessage);
+    if (contextResponse) return contextResponse;
+    
+    // Resposta padrão
+    return getDefaultResponse();
 }
 
 /**

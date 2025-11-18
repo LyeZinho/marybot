@@ -4,62 +4,61 @@
  */
 
 import { logger } from './logger.js';
+import { externalLLMService } from './ExternalLLMService.js';
+import { externalVoiceService } from './ExternalVoiceService.js';
 
 class VoiceConversationService {
   constructor() {
-    this.aiServerUrl = 'http://localhost:3001';
     this.conversationHistory = new Map(); // userId -> history
     this.activeConversations = new Set(); // userId em conversa ativa
   }
 
   /**
-   * 🧠 Processar conversa com IA GPT-2
+   * 🧠 Processar conversa com IA LLM Externa
    */
   async processWithAI(userId, text, context = {}) {
     try {
-      logger.info(`🧠 Processando com IA: "${text}"`);
+      logger.info(`🧠 Processando com IA LLM: "${text}"`);
 
       // Obter histórico da conversa
       const history = this.conversationHistory.get(userId) || [];
       
-      // Preparar contexto para a IA
-      const conversationContext = {
-        user_message: text,
-        history: history.slice(-5), // Últimas 5 mensagens
-        personality: 'friendly_female_assistant',
-        language: 'pt-BR',
-        ...context
-      };
-
-      // Fazer requisição para o servidor de IA
-      const response = await fetch(`${this.aiServerUrl}/api/conversation`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(conversationContext)
-      });
-
-      if (!response.ok) {
-        throw new Error(`Servidor IA retornou erro: ${response.status}`);
-      }
-
-      const aiResult = await response.json();
+      // Construir contexto para a API LLM
+      let contextText = 'Você é MaryBot, um assistente de voz amigável para Discord. ';
+      contextText += 'Responda de forma natural, breve e conversacional em português brasileiro. ';
+      contextText += 'Esta é uma conversa por voz, então mantenha as respostas concisas.';
       
-      if (aiResult.success && aiResult.response) {
+      // Adicionar histórico recente
+      if (history.length > 0) {
+        contextText += '\n\nHistórico da conversa:';
+        history.slice(-3).forEach(msg => {
+          const role = msg.role === 'user' ? 'Usuário' : 'Você';
+          contextText += `\n${role}: ${msg.content}`;
+        });
+      }
+      
+      // Gerar resposta usando API LLM externa
+      const aiResult = await externalLLMService.generateConversation({
+        prompt: text,
+        context: contextText,
+        maxTokens: 100, // Mais conciso para voz
+        userId: userId
+      });
+      
+      if (aiResult.response && aiResult.response.trim()) {
         // Atualizar histórico
         this.updateConversationHistory(userId, text, aiResult.response);
         
-        logger.success(`✅ IA respondeu: "${aiResult.response.substring(0, 50)}..."`);
+        logger.success(`✅ IA LLM respondeu: "${aiResult.response.substring(0, 50)}..."`);
         return {
           success: true,
           response: aiResult.response,
-          confidence: aiResult.confidence || 0.8,
-          source: 'gpt2-ai'
+          confidence: 0.9,
+          source: 'external_llm'
         };
       }
 
-      throw new Error('IA não gerou resposta válida');
+      throw new Error('API LLM não gerou resposta válida');
 
     } catch (error) {
       logger.warn(`⚠️ Erro na IA: ${error.message}`);

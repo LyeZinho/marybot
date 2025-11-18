@@ -18,7 +18,7 @@ import { promisify } from 'util';
 import path from 'path';
 import { logger } from './logger.js';
 import { speechToTextService } from './SpeechToTextService.js';
-import { textToSpeechService } from './TextToSpeechService.js';
+import { externalVoiceService } from './ExternalVoiceService.js';
 import { handleConversation } from './conversationManager.js';
 import { voiceConversationService } from './VoiceConversationService.js';
 
@@ -450,8 +450,8 @@ class VoiceInteractionManager {
 
       logger.info(`🔊 Gerando resposta por voz: "${text.substring(0, 50)}${text.length > 50 ? '...' : ''}"`);
       
-      // Gerar áudio TTS
-      const audioPath = await textToSpeechService.synthesizeText(text, options);
+      // Gerar áudio TTS via API externa
+      const audioPath = await externalVoiceService.synthesizeText(text, options);
       if (!audioPath) {
         logger.error('❌ Falha ao gerar áudio TTS');
         return false;
@@ -742,8 +742,8 @@ class VoiceInteractionManager {
 
       logger.info(`🔊 Gerando resposta por voz: "${text.substring(0, 50)}${text.length > 50 ? '...' : ''}"`);
       
-      // Gerar áudio TTS
-      const audioPath = await textToSpeechService.synthesizeText(text, options);
+      // Gerar áudio TTS via API externa
+      const audioPath = await externalVoiceService.synthesizeText(text, options);
       if (!audioPath) {
         logger.error('❌ Falha ao gerar áudio TTS');
         return false;
