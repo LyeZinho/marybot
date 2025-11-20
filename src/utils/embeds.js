@@ -90,3 +90,55 @@ export const createInfoEmbed = (title, description) => {
     .setDescription(description)
     .build();
 };
+
+// Função genérica createEmbed para compatibilidade
+export const createEmbed = (titleOrOptions = {}, type = null) => {
+  const embed = new EmbedBuilder();
+  
+  // Se o primeiro parâmetro for string, usar como description
+  if (typeof titleOrOptions === 'string') {
+    embed.setDescription(titleOrOptions);
+    
+    // Definir cor e emoji baseado no type
+    if (type === 'error') {
+      embed.setColor(config.colors.error);
+      embed.setTitle(`${config.emojis.error} Erro`);
+    } else if (type === 'success') {
+      embed.setColor(config.colors.success);
+      embed.setTitle(`${config.emojis.success} Sucesso`);
+    } else if (type === 'warning') {
+      embed.setColor(config.colors.warning);
+      embed.setTitle(`${config.emojis.warning} Aviso`);
+    } else if (type === 'info') {
+      embed.setColor(config.colors.primary);
+      embed.setTitle(`${config.emojis.info} Informação`);
+    } else {
+      embed.setColor(config.colors.primary);
+    }
+  } else {
+    // Usar como objeto de opções
+    const options = titleOrOptions;
+    
+    if (options.title) embed.setTitle(options.title);
+    if (options.description) embed.setDescription(options.description);
+    if (options.color) embed.setColor(options.color);
+    else embed.setColor(config.colors.primary);
+    if (options.fields) {
+      options.fields.forEach(field => {
+        if (field && field.name && field.value) {
+          embed.addField(field.name, field.value, field.inline || false);
+        }
+      });
+    }
+    if (options.footer) {
+      if (typeof options.footer === 'string') {
+        embed.setFooter({ text: options.footer });
+      } else {
+        embed.setFooter(options.footer);
+      }
+    }
+    if (options.timestamp) embed.setTimestamp();
+  }
+  
+  return embed.build();
+};

@@ -50,6 +50,10 @@ model User {
   raidParticipations RaidParticipation[]
   userQuests      UserQuest[]
   questCompletions QuestCompletion[]
+  
+  // Sistema de convites
+  createdInvites  Invite[]    @relation("InviteCreator")
+  inviteRewards   InviteUse[] @relation("InviteRewards")
 
   @@map("users")
 }
@@ -119,6 +123,9 @@ model Guild {
 
   // Relacionamentos
   config GuildConfig?
+  invites Invite[]
+  inviteUses InviteUse[]
+  inviteConfig InviteConfig?
 
   @@map("guilds")
 }
@@ -670,4 +677,79 @@ model GuildContext {
   updatedAt       DateTime @updatedAt
   
   @@map("guild_context")
+}
+
+// Sistema de Convites/Afiliados
+model Invite {
+  id           String   @id @default(cuid())
+  code         String   @unique // Código do convite do Discord
+  guildId      String   // ID do servidor
+  inviterId    String   // ID do usuário que criou o convite
+  channelId    String?  // Canal onde foi criado (opcional)
+  uses         Int      @default(0) // Usos atuais
+  maxUses      Int      @default(0) // Máximo de usos (0 = ilimitado)
+  temporary    Boolean  @default(false) // Se é temporário
+  maxAge       Int      @default(0) // Tempo de expiração em segundos (0 = nunca expira)
+  createdAt    DateTime @default(now())
+  expiresAt    DateTime? // Data de expiração calculada
+  isActive     Boolean  @default(true)
+  
+  // Relacionamentos
+  inviter      User     @relation("InviteCreator", fields: [inviterId], references: [discordId], onDelete: Cascade)
+  guild        Guild    @relation(fields: [guildId], references: [id], onDelete: Cascade)
+  inviteUses   InviteUse[]
+  
+  @@index([guildId])
+  @@index([inviterId])
+  @@index([code])
+  @@map("invites")
+}
+
+// Rastreamento de uso de convites
+model InviteUse {
+  id          String   @id @default(cuid())
+  inviteCode  String   // Código do convite usado
+  guildId     String   // ID do servidor
+  inviterId   String   // ID de quem criou o convite
+  inviteeId   String   // ID de quem usou o convite (entrou no servidor)
+  joinedAt    DateTime @default(now()) // Quando a pessoa entrou
+  leftAt      DateTime? // Quando saiu (se saiu)
+  isValid     Boolean  @default(true) // Se o convite é considerado válido para recompensas
+  rewardGiven Boolean  @default(false) // Se a recompensa foi dada
+  rewardAmount Int     @default(0) // Quantia da recompensa
+  fraudReason String?  // Motivo se marcado como fraude
+  
+  // Relacionamentos
+  invite      Invite   @relation(fields: [inviteCode], references: [code], onDelete: Cascade)
+  inviter     User     @relation("InviteRewards", fields: [inviterId], references: [discordId], onDelete: Cascade)
+  guild       Guild    @relation(fields: [guildId], references: [id], onDelete: Cascade)
+  
+  @@index([guildId])
+  @@index([inviterId])
+  @@index([inviteeId])
+  @@index([joinedAt])
+  @@map("invite_uses")
+}
+
+// Configurações do sistema de convites por servidor
+model InviteConfig {
+  id                    String   @id @default(cuid())
+  guildId               String   @unique
+  enabled               Boolean  @default(false) // Sistema habilitado
+  rewardPerInvite       Int      @default(100) // Coins por convite válido
+  bonusThresholds       String?  // JSON: {10: 500, 25: 1000, 50: 2500} - bônus por marcos
+  minAccountAge         Int      @default(7) // Dias mínimos de idade da conta
+  minStayTime           Int      @default(24) // Horas mínimas no servidor para validar
+  maxRewardPerDay       Int      @default(1000) // Máximo de coins por dia
+  fraudDetection        Boolean  @default(true) // Detecção de fraudes habilitada
+  logChannelId          String?  // Canal para logs de convites
+  adminRoles            String?  // JSON array com roles de admin
+  exemptFromAntifraud   String?  // JSON array com IDs isentos de antifraud
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+  
+  // Relacionamentos
+  guild                 Guild    @relation(fields: [guildId], references: [id], onDelete: Cascade)
+  
+  @@map("invite_config")
 }

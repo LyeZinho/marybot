@@ -26,6 +26,32 @@ export default {
           return await message.reply({ embeds: [embed] });
         }
         
+        // 🔄 Verificar se é comando híbrido
+        const slashVersion = client.commands.get(command.name + '_slash');
+        const isHybrid = !!slashVersion;
+        
+        // Determinar tipo do comando
+        let commandType = "";
+        let commandTypeEmoji = "";
+        let usageExamples = [];
+        
+        if (isHybrid) {
+          commandType = "Híbrido (Prefix + Slash)";
+          commandTypeEmoji = "🔄";
+          usageExamples = [
+            `\`${config.prefix}${command.usage || command.name}\``,
+            `\`/${command.name}\``
+          ];
+        } else if (command.type === 'slash') {
+          commandType = "Apenas Slash";
+          commandTypeEmoji = "⚡";
+          usageExamples = [`\`/${command.name}\``];
+        } else {
+          commandType = "Apenas Prefix";
+          commandTypeEmoji = "📝";
+          usageExamples = [`\`${config.prefix}${command.usage || command.name}\``];
+        }
+
         // Mostrar informações detalhadas do comando
         const embed = {
           color: config.colors.primary,
@@ -37,8 +63,13 @@ export default {
               inline: false,
             },
             {
+              name: "🎮 Tipo",
+              value: `${commandTypeEmoji} ${commandType}`,
+              inline: true,
+            },
+            {
               name: "💬 Uso",
-              value: `\`${config.prefix}${command.usage || command.name}\``,
+              value: usageExamples.join('\n'),
               inline: true,
             },
             {
@@ -85,7 +116,48 @@ export default {
       const page = parseInt(args[0]) || 1;
       
       // Mostrar lista de todos os comandos com paginação
-      const categories = this.organizeCommandsByCategory(client.commands);
+      // 🔄 Organizar comandos híbridos (filtrar duplicatas slash)
+      const filteredCommands = new Map();
+      
+      client.commands.forEach((cmd, name) => {
+        // Se for comando slash (_slash), verificar se existe versão prefix
+        if (name.endsWith('_slash')) {
+          const baseName = name.replace('_slash', '');
+          const prefixVersion = client.commands.get(baseName);
+          
+          if (prefixVersion) {
+            // Marcar como híbrido
+            if (!filteredCommands.has(baseName)) {
+              filteredCommands.set(baseName, {
+                ...prefixVersion,
+                isHybrid: true,
+                hasSlash: true
+              });
+            }
+          } else {
+            // Comando apenas slash
+            filteredCommands.set(baseName, {
+              ...cmd,
+              name: baseName,
+              isSlashOnly: true
+            });
+          }
+        } else {
+          // Comando prefix, verificar se tem versão slash
+          const slashVersion = client.commands.get(name + '_slash');
+          
+          if (!filteredCommands.has(name)) {
+            filteredCommands.set(name, {
+              ...cmd,
+              isHybrid: !!slashVersion,
+              hasSlash: !!slashVersion,
+              isPrefixOnly: !slashVersion
+            });
+          }
+        }
+      });
+
+      const categories = this.organizeCommandsByCategory(filteredCommands);
       const categoriesPerPage = 2; // Reduzir para 2 categorias por página para melhor legibilidade
       const totalCategories = Object.keys(categories).length;
       const totalPages = Math.ceil(totalCategories / categoriesPerPage);
@@ -227,6 +299,8 @@ export default {
         `Use \`${config.prefix}help [comando]\` para informações detalhadas sobre um comando específico.`,
         `Use \`${config.prefix}help [página]\` para navegar entre páginas.`,
         ``,
+        `**🔄 Híbrido** (m. + /) • **⚡ Slash** (apenas /) • **📝 Prefix** (apenas m.)`,
+        ``,
         `**🏰 Comandos Principais**: \`dungeon\`, \`inv\`, \`equip\`, \`stats\`, \`loot\`, \`shop\``
       ].join('\n'),
       fields: [],
@@ -240,10 +314,20 @@ export default {
     currentCategories.forEach(([categoryName, commands]) => {
       const categoryEmoji = this.getCategoryEmoji(categoryName);
       
-      // Mostrar todos os comandos sem abreviação
+      // Mostrar todos os comandos com indicadores de tipo
       const commandList = commands
-        .map(cmd => `\`${cmd.name}\``)
-        .join(", ");
+        .map(cmd => {
+          let indicator = "";
+          if (cmd.isHybrid) {
+            indicator = "🔄"; // Híbrido (prefix + slash)
+          } else if (cmd.isSlashOnly) {
+            indicator = "⚡"; // Apenas slash
+          } else {
+            indicator = "📝"; // Apenas prefix
+          }
+          return `${indicator}\`${cmd.name}\``;
+        })
+        .join(" ");
       
       embed.fields.push({
         name: `${categoryEmoji} ${categoryName.toUpperCase()} (${commands.length} comandos)`,

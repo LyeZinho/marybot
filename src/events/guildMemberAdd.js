@@ -3,6 +3,7 @@ import { AttachmentBuilder, EmbedBuilder } from "discord.js";
 import { configManager } from "../utils/configManager.js";
 import { welcomeRenderer } from "../utils/welcomeRenderer.js";
 import { logger } from "../utils/logger.js";
+import { inviteSystem } from "../utils/inviteSystem.js";
 
 // Configurações padrão
 const DEFAULT_WELCOME_SETTINGS = {
@@ -90,5 +91,12 @@ export default async (client, member) => {
   } catch (error) {
     logger.error(`[Welcome] Erro ao processar boas-vindas: ${error.message}`);
     console.error(error);
+  }
+
+  // 🎯 Processar sistema de convites/afiliados
+  try {
+    await inviteSystem.handleMemberJoin(member, member.guild);
+  } catch (error) {
+    logger.error(`[Invites] Erro ao processar convite: ${error.message}`);
   }
 };

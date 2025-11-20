@@ -28,7 +28,7 @@ client.commands = new Collection();
 
 // --- APIs externas configuradas em ExternalLLMService.js e ExternalVoiceService.js ---
 
-// --- Função para carregar comandos dinamicamente ---
+// --- Função para carregar comandos dinamicamente (Sistema Híbrido) ---
 async function loadCommands() {
   try {
     const commandFolders = fs.readdirSync("./src/commands");
@@ -40,15 +40,47 @@ async function loadCommands() {
       
       for (const file of commandFiles) {
         try {
-          const { default: command } = await import(`./commands/${folder}/${file}`);
+          const commandModule = await import(`./commands/${folder}/${file}`);
+          const { default: command, data: slashData, execute: slashExecute } = commandModule;
           
-          if (!command.name) {
-            logger.warn(`Comando em ${folder}/${file} não possui propriedade 'name'`);
-            continue;
+          // 🔄 Sistema Híbrido: Suporte para ambos os tipos
+          let prefixLoaded = false;
+          let slashLoaded = false;
+          
+          // Comando tradicional com prefix
+          if (command && command.name) {
+            client.commands.set(command.name, {
+              ...command,
+              type: 'prefix',
+              category: folder
+            });
+            logger.info(`📝 Prefix: m.${command.name} (${folder})`);
+            prefixLoaded = true;
           }
           
-          client.commands.set(command.name, command);
-          logger.info(`Comando carregado: ${command.name} (${folder})`);
+          // Comando slash
+          if (slashData && slashData.name && slashExecute) {
+            const slashCommand = {
+              data: slashData,
+              execute: slashExecute,
+              type: 'slash',
+              category: folder
+            };
+            client.commands.set(slashData.name + '_slash', slashCommand);
+            logger.info(`⚡ Slash: /${slashData.name} (${folder})`);
+            slashLoaded = true;
+          }
+          
+          // 🎯 Comando Híbrido (ambos os tipos)
+          if (prefixLoaded && slashLoaded) {
+            logger.success(`🔄 Híbrido: ${command.name} - Prefix + Slash disponíveis`);
+          }
+          
+          // Aviso se não tem comandos válidos
+          if (!prefixLoaded && !slashLoaded) {
+            logger.warn(`⚠️ ${folder}/${file}: Nenhum comando válido encontrado`);
+          }
+          
         } catch (error) {
           logger.error(`Erro ao carregar comando ${folder}/${file}:`, error);
         }
